@@ -1,0 +1,34 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:slim
+    container_name: OpenWebUi
+    restart: unless-stopped
+    ports:
+      - "4191:8080"
+    volumes:
+      - ${HOME}/Projects/Containers/OpenWebUi:/app/backend/data
+    extra_hosts:
+      # Bind container to your specific host services
+      - host.docker.internal:host-gateway
+      - ollama:localhost          # alias for Ollama at localhost:11434
+      - omniroute:localhost       # alias for omniroute at localhost:20128
+    environment:
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in .env}
+      # Use your exact Ollama URL — OpenWebUi will resolve "ollama" to localhost
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      # Use your exact omniroute URL
+      - OMNIROUTE_URL=${OMNIROUTE_URL:-http://omniroute:20128}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  open-webui:
