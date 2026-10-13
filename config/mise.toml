@@ -1,0 +1,10 @@
+[tools]
+claude = "latest"
+codex = "latest"
+copilot = "latest"
+opencode = "latest"
+gh = "latest"
+node = "26.8.2"
+
+[settings.upgrade]
+auto_prune = false

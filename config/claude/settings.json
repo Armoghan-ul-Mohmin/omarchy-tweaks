@@ -1,0 +1,106 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "theme": "dark",
+    "spinnerTipsEnabled": true,
+    "cleanupPeriodDays": 30,
+    "language": "English",
+    "respectGitignore": true,
+    "terminalProgressBarEnabled": true,
+    "effortLevel": "low",
+    "model": "auto",
+    "env": {
+        "ANTHROPIC_API_KEY": "{env:OMNIROUTE_CLAUDE_API_KEY}",
+        "ANTHROPIC_BASE_URL": "http://localhost:20128/v1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1"
+    },
+    "statusLine": {
+        "type": "command",
+        "command": "node ~/.claude/statusline.js"
+    },
+    "modelSettings": {
+        "auto": {
+            "effortLevel": "low"
+        }
+    },
+    "permissions": {
+        "deny": [
+            "Read(./.env)",
+            "Read(./.env.*)",
+            "Read(./secrets/**)",
+            "Read(./config/**)",
+            "Read(./**/*.pem)",
+            "Read(./**/*.key)",
+            "Read(./**/id_rsa)",
+            "Read(./**/id_ed25519)"
+        ],
+        "ask": [
+            "Bash",
+            "Read(*)",
+            "Write(*)"
+        ],
+        "allow": [
+            "Bash(ls*)",
+            "Bash(pwd)",
+            "Bash(cd*)",
+            "Bash(git status *)",
+            "Bash(git diff *)",
+            "Bash(npm run *)"
+        ],
+        "defaultMode": "default"
+    },
+    "enabledPlugins": {
+        "playwright@claude-plugins-official": true,
+        "remember@claude-plugins-official": true,
+        "claude-guard@hex-plugins": true,
+        "ponytail@ponytail": true,
+        "claude-memory@anthropic-plugin-directory": true,
+        "context7@claude-plugins-official": true,
+        "github@claude-plugins-official": true
+    },
+    "extraKnownMarketplaces": {
+        "anthropic-agent-skills": {
+            "source": {
+                "source": "github",
+                "repo": "anthropics/skills"
+            }
+        },
+        "hex-plugins": {
+            "source": {
+                "source": "github",
+                "repo": "hex/claude-marketplace"
+            }
+        },
+        "ponytail": {
+            "source": {
+                "source": "github",
+                "repo": "DietrichGebert/ponytail"
+            }
+        },
+        "thedotmack": {
+            "source": {
+                "source": "github",
+                "repo": "thedotmack/claude-marketplace"
+            }
+        }
+    },
+    "hooks": {
+        "SessionStart": [
+            {
+                "hooks": [{
+                    "type": "command",
+                    "command": "git status --short --branch 2>/dev/null || true",
+                    "timeout": 5
+                }]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [{
+                    "type": "command",
+                    "command": "claude-notify send"
+                }]
+            }
+        ]
+    }
+}

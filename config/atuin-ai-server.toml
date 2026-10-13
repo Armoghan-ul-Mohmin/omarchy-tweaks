@@ -1,0 +1,117 @@
+api_key = "<Your-Omniroute-Key>"
+endpoint = "http://localhost:20128/v1"
+port = 4099
+default_model = "omniroute"
+
+[request.body]
+stream_options = { include_usage = true }
+
+# --- OmniRoute core auto tiers ---
+[[models]]
+alias = "omniroute"
+name = "OmniRoute Auto"
+description = "Adaptive router — selects the best available model for your request based on context and capabilities"
+model = "auto"
+
+[[models]]
+alias = "best-coding"
+name = "Best Coding"
+description = "Top-tier coding model with strong logic, problem-solving, and programming language comprehension"
+model = "auto/best-coding"
+
+[[models]]
+alias = "best-reasoning"
+name = "Best Reasoning"
+description = "Advanced reasoning model excelling at complex problem decomposition, logical inference, and analytical thinking"
+model = "auto/best-resoning"
+
+[[models]]
+alias = "best-chat"
+name = "Best Chat"
+description = "Optimized for natural conversation, context retention, and user engagement with a friendly tone"
+model = "auto/best-chat"
+
+[[models]]
+alias = "best-fast"
+name = "Fast"
+description = "Speed-optimized model delivering quick responses with good accuracy for time-sensitive tasks"
+model = "auto/best-fast"
+
+[[models]]
+alias = "smart"
+name = "Smart"
+description = "Intelligence-focused model balancing reasoning power with contextual understanding for complex queries"
+model = "auto/smart"
+
+[[models]]
+alias = "best-free"
+name = "Best Free"
+description = "Highest-quality model available in OmniRoute's free tier, ideal for general-purpose usage"
+model = "auto/best-free"
+
+[[models]]
+alias = "best-vision"
+name = "Best Vision"
+description = "Vision-capable model for analyzing images, diagrams, and visual content alongside text"
+model = "auto/best-vision"
+
+[[models]]
+alias = "best-multimodal"
+name = "Best Multimodal"
+description = "Handles text, code, and visual inputs with seamless integration across modalities"
+model = "auto/best-multimodal"
+
+[[models]]
+alias = "coding-pro"
+name = "Coding Pro"
+description = "Specialized for software development, debugging, and technical documentation with deep programming knowledge"
+model = "auto/pro-coding"
+
+[[models]]
+alias = "reasoning-pro"
+name = "Reasoning Pro"
+description = "Advanced analytical model for complex problem-solving, research, and data analysis"
+model = "auto/pro-reasoning"
+
+[[models]]
+alias = "tools-pro"
+name = "Tools Pro"
+description = "Optimized for tool use, API integration, and task automation with strong functional capabilities"
+model = "auto/pro-tools"
+
+# --- Local Ollama models ---
+[[models]]
+alias = "dolphin-phi"
+name = "Dolphin Phi"
+description = "General-purpose unfiltered model with strong conversational ability and good performance on standard benchmarks"
+model = "ollama/dolphin-phi:2.7b-v2.6-q3_K_S"
+
+[[models]]
+alias = "qwen3"
+name = "Qwen3"
+description = "Efficient language model with balanced performance for general tasks and coding"
+model = "ollama/qwen3:1.7b"
+
+[[models]]
+alias = "qwen-coder"
+name = "Qwen2.5 Coder"
+description = "Specialized for programming and code generation with strong technical language understanding"
+model = "ollama/qwen2.5-coder:1.5b"
+
+[[models]]
+alias = "tinyllama"
+name = "TinyLLaMA"
+description = "Lightweight model optimized for speed and efficiency, excellent for resource-constrained environments"
+model = "ollama/tinyllama:1.1b"
+
+[[models]]
+alias = "qwen-0.5b"
+name = "Qwen 0.5B"
+description = "Ultra-light model for quick inference on limited hardware, suitable for basic tasks"
+model = "ollama/qwen:0.5b"
+
+[[models]]
+alias = "qwen2.5-coder-0.5b"
+name = "Qwen2.5 Coder 0.5B"
+description = "Compact coding model for rapid prototyping and lightweight development tasks"
+model = "ollama/qwen2.5-coder:0.5b"

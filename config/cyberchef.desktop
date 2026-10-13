@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Name=CyberChef
+Exec=omarchy-launch-webapp file:///usr/share/webapps/cyberchef/index.html
+Type=Application
+Icon=cyberchef
+Terminal=false
+StartupNotify=true

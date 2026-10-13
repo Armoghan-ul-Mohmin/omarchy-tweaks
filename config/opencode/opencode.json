@@ -1,0 +1,15 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "autoupdate": false,
+    "provider": {
+        "omniroute": {
+            "name": "OmniRoute",
+            "npm": "@ai-sdk/openai-compatible",
+            "options": {
+                "baseURL": "http://localhost:20128/v1",
+                "apiKey": "{env:OMNIROUTE_OPENCODE_API_KEY}"
+            },
+            "models": {}
+        }
+    }
+}
