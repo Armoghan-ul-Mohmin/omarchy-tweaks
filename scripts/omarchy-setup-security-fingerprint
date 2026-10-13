@@ -1,0 +1,408 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# omarchy:summary=Set up fingerprint authentication for sudo, polkit, and lock screen
+# omarchy:requires-sudo=true
+# =============================================================================
+
+set -euo pipefail
+
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+readonly VERIFY_MAX_ATTEMPTS=12
+readonly FPRINTD_START_WAIT=5
+readonly FPRINTD_RESTART_WAIT=3
+
+readonly FPRINTD_GATE='auth      [success=1 default=ignore] pam_exec.so quiet /usr/bin/omarchy-hw-laptop-closed'
+
+
+# =============================================================================
+# Output helpers
+# =============================================================================
+
+print_success() {
+    printf '\033[32m%s\033[0m\n' "$1"
+}
+
+print_error() {
+    printf '\033[31m%s\033[0m\n' "$1"
+}
+
+print_info() {
+    printf '\033[36m%s\033[0m\n' "$1"
+}
+
+print_warning() {
+    printf '\033[33m%s\033[0m\n' "$1"
+}
+
+
+# =============================================================================
+# Completely reset fprintd
+#
+# VFS5011 can leave the libusb device in a bad state after a failed open.
+# Stopping the daemon completely before starting it again gives libfprint a
+# clean device lifecycle.
+# =============================================================================
+
+reset_fprintd() {
+    print_warning "Resetting fingerprint service..."
+
+    sudo systemctl stop fprintd 2>/dev/null || true
+
+    sleep 2
+
+    sudo systemctl start fprintd
+
+    sleep "$FPRINTD_START_WAIT"
+}
+
+
+# =============================================================================
+# Restart fprintd without a full stop/start
+# =============================================================================
+
+restart_fprintd() {
+    print_warning "Fingerprint reader appears to be stuck."
+    print_info "Restarting fprintd..."
+
+    sudo systemctl restart fprintd
+
+    sleep "$FPRINTD_RESTART_WAIT"
+}
+
+
+# =============================================================================
+# Verify fingerprint
+# =============================================================================
+
+verify_fingerprint() {
+
+    local attempt=1
+    local output
+    local exit_code
+
+    while (( attempt <= VERIFY_MAX_ATTEMPTS )); do
+
+        echo
+        print_info "Fingerprint verification attempt ${attempt}/${VERIFY_MAX_ATTEMPTS}"
+        echo
+
+        set +e
+        output="$(fprintd-verify 2>&1)"
+        exit_code=$?
+        set -e
+
+        printf '%s\n' "$output"
+
+
+        # ---------------------------------------------------------------------
+        # SUCCESS
+        # ---------------------------------------------------------------------
+
+        if grep -q 'verify-match' <<< "$output"; then
+            echo
+            print_success "Fingerprint verified successfully."
+            return 0
+        fi
+
+
+        # ---------------------------------------------------------------------
+        # Normal fingerprint mismatch
+        #
+        # Do NOT restart fprintd here.
+        # The reader successfully worked; the captured fingerprint simply
+        # didn't match the enrolled template.
+        # ---------------------------------------------------------------------
+
+        if grep -q 'verify-no-match' <<< "$output"; then
+
+            if (( attempt < VERIFY_MAX_ATTEMPTS )); then
+                echo
+                print_warning "Fingerprint did not match."
+                echo "Swipe the same finger again."
+                sleep 1
+
+                ((attempt++))
+                continue
+            fi
+
+            break
+        fi
+
+
+        # ---------------------------------------------------------------------
+        # VFS5011 / libfprint / libusb failure
+        # ---------------------------------------------------------------------
+
+        if grep -Eq \
+            'transfer timed out|transfer failed|already open|failed to claim device|Open failed with error' \
+            <<< "$output"; then
+
+            if (( attempt < VERIFY_MAX_ATTEMPTS )); then
+                restart_fprintd
+
+                print_info "Fingerprint service recovered."
+                print_info "Trying again..."
+
+                ((attempt++))
+                continue
+            fi
+
+            break
+        fi
+
+
+        # ---------------------------------------------------------------------
+        # Unknown error
+        # ---------------------------------------------------------------------
+
+        print_warning "Unexpected fingerprint verification error."
+
+        if (( attempt < VERIFY_MAX_ATTEMPTS )); then
+            restart_fprintd
+
+            ((attempt++))
+            continue
+        fi
+
+        break
+    done
+
+
+    echo
+    print_error "Fingerprint verification did not produce a successful match."
+
+    return 1
+}
+
+
+# =============================================================================
+# Configure PAM
+# =============================================================================
+
+setup_pam_config() {
+
+    # -------------------------------------------------------------------------
+    # sudo
+    # -------------------------------------------------------------------------
+
+    if ! grep -q 'pam_fprintd.so' /etc/pam.d/sudo; then
+
+        echo "Configuring sudo for fingerprint authentication..."
+
+        sudo sed -i \
+            '1i auth      sufficient pam_fprintd.so' \
+            /etc/pam.d/sudo
+    fi
+
+
+    if ! grep -q 'omarchy-hw-laptop-closed' /etc/pam.d/sudo; then
+
+        echo "Adding clamshell gate to sudo..."
+
+        sudo sed -i \
+            "/pam_fprintd\.so/i $FPRINTD_GATE" \
+            /etc/pam.d/sudo
+    fi
+
+
+    # -------------------------------------------------------------------------
+    # polkit
+    # -------------------------------------------------------------------------
+
+    if [[ -f /etc/pam.d/polkit-1 ]]; then
+
+        if ! grep -q 'pam_fprintd.so' /etc/pam.d/polkit-1; then
+
+            echo "Configuring polkit for fingerprint authentication..."
+
+            sudo sed -i \
+                '1i auth      sufficient pam_fprintd.so' \
+                /etc/pam.d/polkit-1
+        fi
+
+
+        if ! grep -q 'omarchy-hw-laptop-closed' /etc/pam.d/polkit-1; then
+
+            echo "Adding clamshell gate to polkit..."
+
+            sudo sed -i \
+                "/pam_fprintd\.so/i $FPRINTD_GATE" \
+                /etc/pam.d/polkit-1
+        fi
+
+    else
+
+        echo "Creating polkit fingerprint configuration..."
+
+        sudo tee /etc/pam.d/polkit-1 >/dev/null <<EOF
+$FPRINTD_GATE
+auth      sufficient pam_fprintd.so
+auth      required pam_unix.so
+
+account   required pam_unix.so
+password  required pam_unix.so
+session   required pam_unix.so
+EOF
+
+    fi
+}
+
+
+# =============================================================================
+# Lock screen PAM
+# =============================================================================
+
+setup_lock_fingerprint_pam() {
+
+    echo "Configuring lock screen for fingerprint authentication..."
+
+    sudo tee /etc/pam.d/omarchy-lock-fingerprint >/dev/null <<'EOF'
+#%PAM-1.0
+auth       required                    pam_fprintd.so
+account    include                     system-local-login
+EOF
+}
+
+
+# =============================================================================
+# Check fingerprint reader
+# =============================================================================
+
+if ! omarchy-hw-fingerprint; then
+    print_error "No fingerprint sensor detected."
+    exit 1
+fi
+
+
+# =============================================================================
+# Install packages
+# =============================================================================
+
+if omarchy-pkg-missing libfprint-git fprintd usbutils; then
+
+    echo "Installing required fingerprint packages..."
+
+    sudo pacman -S \
+        --needed \
+        --noconfirm \
+        --ask 4 \
+        libfprint-git \
+        fprintd \
+        usbutils
+fi
+
+
+# =============================================================================
+# Initial clean fprintd state
+# =============================================================================
+
+echo
+print_info "Preparing fingerprint service..."
+
+reset_fprintd
+
+
+# =============================================================================
+# Enrollment
+# =============================================================================
+
+echo
+print_success "Let's set up your right index finger."
+echo
+echo "Swipe your finger across the sensor repeatedly."
+echo "Use a smooth, natural swipe."
+echo "Slightly vary the position of your finger on each swipe."
+echo
+
+if ! fprintd-enroll -f right-index-finger; then
+
+    echo
+    print_error "Fingerprint enrollment failed."
+    exit 1
+fi
+
+echo
+print_success "Fingerprint enrolled successfully."
+
+
+# =============================================================================
+# IMPORTANT:
+#
+# VFS5011 can behave badly when verification immediately follows enrollment.
+#
+# Completely tear down fprintd and start it again before verification.
+# =============================================================================
+
+echo
+print_info "Preparing fingerprint reader for verification..."
+reset_fprintd
+
+
+# =============================================================================
+# Show enrolled fingerprint
+# =============================================================================
+
+echo
+print_info "Current fingerprint enrollment:"
+
+fprintd-list "$USER" || true
+
+
+# =============================================================================
+# Verification
+# =============================================================================
+
+echo
+print_success "Now let's verify your fingerprint."
+echo
+echo "Swipe your RIGHT INDEX finger across the reader."
+echo
+echo "The reader may need several attempts."
+echo
+
+if ! verify_fingerprint; then
+
+    echo
+    print_error "Fingerprint verification failed."
+    echo
+    echo "The fingerprint remains enrolled."
+    echo "System authentication was NOT modified."
+    echo
+    exit 1
+fi
+
+
+# =============================================================================
+# Configure PAM only after successful verification
+# =============================================================================
+
+echo
+print_info "Fingerprint verification succeeded."
+echo
+print_info "Configuring system authentication..."
+
+setup_pam_config
+setup_lock_fingerprint_pam
+
+
+# =============================================================================
+# Final
+# =============================================================================
+
+echo
+print_success "Fingerprint authentication is now configured."
+echo
+echo "Fingerprint authentication is available for:"
+echo
+echo "  sudo"
+echo "  polkit"
+echo "  lock screen"
+echo
+echo "Lock screen:"
+echo "  Super + Ctrl + L"
+echo
