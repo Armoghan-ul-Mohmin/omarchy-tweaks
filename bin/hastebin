@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+
+# ============================================================
+#                         HASTEBIN
+# ============================================================
+
+UPLOAD_URL="https://pste.us/documents"
+BASE_URL="https://pste.us"
+
+# ------------------------------------------------------------
+# Colors
+# ------------------------------------------------------------
+
+BLUE="\033[38;2;137;180;250m"
+CYAN="\033[38;2;137;220;235m"
+GREEN="\033[38;2;166;227;161m"
+MAUVE="\033[38;2;203;166;247m"
+RED="\033[38;2;243;139;168m"
+YELLOW="\033[38;2;249;226;175m"
+TEXT="\033[38;2;205;214;244m"
+SUBTEXT="\033[38;2;166;173;200m"
+DIM="\033[38;2;108;112;134m"
+RESET="\033[0m"
+
+TMP_RESPONSE=""
+TMP_PROGRESS=""
+
+# ------------------------------------------------------------
+# Cleanup
+# ------------------------------------------------------------
+
+cleanup() {
+    [[ -n "$TMP_RESPONSE" && -f "$TMP_RESPONSE" ]] && rm -f "$TMP_RESPONSE"
+    [[ -n "$TMP_PROGRESS" && -f "$TMP_PROGRESS" ]] && rm -f "$TMP_PROGRESS"
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+# ------------------------------------------------------------
+# Error
+# ------------------------------------------------------------
+
+die() {
+    echo
+    printf "  ${RED}✗${RESET} ${TEXT}%s${RESET}\n" "$1"
+    echo
+    exit 1
+}
+
+# ------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------
+
+for cmd in curl jq gum fzf; do
+    if ! command -v "$cmd" &>/dev/null; then
+        die "Missing dependency: $cmd"
+    fi
+done
+
+# ------------------------------------------------------------
+# Arguments
+# ------------------------------------------------------------
+
+FILE_PATH="${1:-}"
+
+if [[ "$FILE_PATH" == "-h" || "$FILE_PATH" == "--help" ]]; then
+    cat <<'EOF'
+
+Usage:
+  hastebin
+  hastebin <file>
+
+Upload a file to pste.us and copy the URL.
+
+Examples:
+  hastebin
+  hastebin script.sh
+EOF
+    exit 0
+fi
+
+# ------------------------------------------------------------
+# Select file
+# ------------------------------------------------------------
+
+if [[ -z "$FILE_PATH" ]]; then
+
+    FILE_PATH=$(
+        find . -maxdepth 1 -type f -printf '%f\n' |
+        fzf \
+            --prompt="  󰈔  " \
+            --border=rounded \
+            --border-label=" hastebin " \
+            --border-label-pos=2 \
+            --reverse \
+            --header=" ↑↓ navigate  •  enter select  •  esc cancel " \
+            --pointer="▸" \
+            --marker="◆" \
+            --color="bg+:#313244,bg:#11111b,spinner:#f5c2e7,hl:#f38ba8,fg:#cdd6f4,header:#7f849c,pointer:#a6e3a1,marker:#f5c2e7,fg+:#cdd6f4,prompt:#89b4fa,hl+:#f38a8a,border:#585b70" \
+            --preview='bat --style=numbers --color=always --line-range=:80 {}' \
+            --preview-window='right:55%:wrap'
+    )
+
+    [[ -n "$FILE_PATH" ]] || exit 0
+fi
+
+# ------------------------------------------------------------
+# Validate file
+# ------------------------------------------------------------
+
+[[ -f "$FILE_PATH" ]] || die "File does not exist: $FILE_PATH"
+[[ -r "$FILE_PATH" ]] || die "File is not readable: $FILE_PATH"
+
+# ------------------------------------------------------------
+# File information
+# ------------------------------------------------------------
+
+FILE_NAME="$(basename "$FILE_PATH")"
+
+FILE_BYTES=$(
+    stat -c%s "$FILE_PATH" 2>/dev/null ||
+    stat -f%z "$FILE_PATH" 2>/dev/null ||
+    echo 0
+)
+
+if command -v numfmt &>/dev/null; then
+    FILE_SIZE=$(numfmt --to=iec --suffix=B "$FILE_BYTES")
+else
+    FILE_SIZE=$(du -h "$FILE_PATH" | cut -f1)
+fi
+
+FILE_TYPE=$(file -b "$FILE_PATH" 2>/dev/null || echo "Unknown")
+FILE_TYPE="${FILE_TYPE%%,*}"
+
+# Keep metadata compact
+if (( ${#FILE_TYPE} > 38 )); then
+    FILE_TYPE="${FILE_TYPE:0:35}..."
+fi
+
+# ------------------------------------------------------------
+# Temporary files
+# ------------------------------------------------------------
+
+TMP_RESPONSE=$(mktemp)
+TMP_PROGRESS=$(mktemp)
+
+# ------------------------------------------------------------
+# Header
+# ------------------------------------------------------------
+
+clear
+
+echo
+
+printf "  ${MAUVE}◆${RESET} ${TEXT}Hastebin${RESET} ${DIM}·${RESET} ${SUBTEXT}quick file sharing${RESET}\n"
+
+echo
+
+printf "  ${DIM}────────────────────────────────────────────────────────${RESET}\n"
+
+printf "  ${BLUE}󰈔${RESET}  ${TEXT}%s${RESET}\n" "$FILE_NAME"
+
+printf "  ${DIM}size${RESET}  ${SUBTEXT}%s${RESET}    " "$FILE_SIZE"
+printf "${DIM}type${RESET}  ${SUBTEXT}%s${RESET}\n" "$FILE_TYPE"
+
+printf "  ${DIM}────────────────────────────────────────────────────────${RESET}\n"
+
+echo
+
+# ------------------------------------------------------------
+# Upload spinner
+# ------------------------------------------------------------
+
+printf "  ${CYAN}󰑓${RESET}  ${TEXT}Uploading${RESET} "
+
+(
+    while true; do
+        printf "${DIM}·${RESET}"
+        sleep 0.20
+
+        printf "\b \b"
+        printf "${DIM}•${RESET}"
+        sleep 0.20
+
+        printf "\b \b"
+        printf "${CYAN}•${RESET}"
+        sleep 0.20
+
+        printf "\b \b"
+    done
+) &
+
+SPINNER_PID=$!
+
+# ------------------------------------------------------------
+# Upload
+# ------------------------------------------------------------
+
+curl \
+    -fS \
+    --progress-bar \
+    -X POST \
+    -H "Content-Type: text/plain" \
+    --data-binary @"$FILE_PATH" \
+    "$UPLOAD_URL" \
+    >"$TMP_RESPONSE" \
+    2>"$TMP_PROGRESS" &
+
+CURL_PID=$!
+
+wait "$CURL_PID"
+CURL_STATUS=$?
+
+kill "$SPINNER_PID" 2>/dev/null
+wait "$SPINNER_PID" 2>/dev/null
+
+# Clear spinner line
+printf "\r\033[2K"
+
+if [[ "$CURL_STATUS" -ne 0 ]]; then
+    printf "  ${RED}✗${RESET} ${TEXT}Upload failed.${RESET}\n"
+    echo
+    exit 1
+fi
+
+# ------------------------------------------------------------
+# Parse response
+# ------------------------------------------------------------
+
+HASTE_KEY=$(jq -r '.key // empty' "$TMP_RESPONSE" 2>/dev/null)
+[[ -n "$HASTE_KEY" ]] || die "Invalid response from server."
+URL="$BASE_URL/$HASTE_KEY"
+
+# ------------------------------------------------------------
+# Clipboard
+# ------------------------------------------------------------
+
+COPIED=false
+
+if command -v wl-copy &>/dev/null; then
+    printf '%s' "$URL" | wl-copy
+    COPIED=true
+
+elif command -v xclip &>/dev/null; then
+    printf '%s' "$URL" | xclip -selection clipboard
+    COPIED=true
+
+elif command -v xsel &>/dev/null; then
+    printf '%s' "$URL" | xsel --clipboard --input
+    COPIED=true
+
+elif command -v pbcopy &>/dev/null; then
+    printf '%s' "$URL" | pbcopy
+    COPIED=true
+fi
+
+# ------------------------------------------------------------
+# Generate QR
+# ------------------------------------------------------------
+
+QR=""
+
+if command -v qrencode &>/dev/null; then
+   QR=$(
+    qrencode \
+        -t ANSIUTF8i \
+        -m 1 \
+        -l M \
+        "$URL"
+    )
+fi
+
+# ------------------------------------------------------------
+# Final output
+# ------------------------------------------------------------
+
+printf "  ${GREEN}✓${RESET}  ${TEXT}Upload complete${RESET}\n"
+
+# File information
+printf "  ${DIM}FILE${RESET}  ${TEXT}%s${RESET}\n" "$FILE_NAME"
+printf "  ${DIM}SIZE${RESET}  ${SUBTEXT}%s${RESET}\n" "$FILE_SIZE"
+printf "  ${DIM}TYPE${RESET}  ${SUBTEXT}%s${RESET}\n" "$FILE_TYPE"
+
+echo
+
+# URL
+printf "  ${DIM}URL${RESET}\n"
+printf "  ${BLUE}%s${RESET}\n" "$URL"
+
+echo
+
+# ------------------------------------------------------------
+# QR
+# ------------------------------------------------------------
+
+if [[ -n "$QR" ]]; then
+
+    printf "  ${DIM}SCAN TO OPEN${RESET}\n"
+    echo
+
+    while IFS= read -r line; do
+        printf "    %s\n" "$line"
+    done <<< "$QR"
+
+    echo
+    echo
+
+else
+
+    printf "  ${YELLOW}⚠${RESET}  ${SUBTEXT}qrencode is not installed${RESET}\n"
+    printf "     ${DIM}Install: sudo pacman -S qrencode${RESET}\n"
+    echo
+
+fi
+
+# ------------------------------------------------------------
+# Clipboard status
+# ------------------------------------------------------------
+
+if [[ "$COPIED" == true ]]; then
+    printf "  ${GREEN}󰆏${RESET}  ${SUBTEXT}URL copied to clipboard${RESET}\n"
+else
+    printf "  ${YELLOW}󰆏${RESET}  ${SUBTEXT}Clipboard utility not found${RESET}\n"
+fi
+
+echo
+
+printf "  ${DIM}────────────────────────────────────────────────────────${RESET}\n"
+printf "  ${GREEN}◆${RESET}  ${SUBTEXT}Ready${RESET}\n"
+
+echo
+
+

@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+
+set -u
+
+command -v gum >/dev/null 2>&1 || {
+    echo "Error: gum is not installed."
+    exit 1
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Theme
+# ─────────────────────────────────────────────────────────────────────────────
+
+PINK=213
+CYAN=81
+PURPLE=141
+GREEN=114
+WHITE=255
+DIM=245
+MUTED=240
+
+clear
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Header
+# ─────────────────────────────────────────────────────────────────────────────
+
+gum style \
+    --border double \
+    --border-foreground "$PINK" \
+    --padding "1 4" \
+    --margin "1 0 0 0" \
+    --align center \
+    --width 78 \
+    "$(gum style \
+        --foreground "$PINK" \
+        --bold \
+        '󰌌  ZSH KEYBINDINGS')"
+
+gum style \
+    --foreground "$DIM" \
+    --align center \
+    --width 78 \
+    '󰘳  custom shortcuts  ·  zsh emacs keymap'
+
+echo
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Custom shortcuts
+# ─────────────────────────────────────────────────────────────────────────────
+
+CUSTOM=$(cat <<'EOF'
+Alt+H          │  Hastebin              │  󰅩 hb
+Alt+Q          │  Server                │  󰒋 server
+Alt+F          │  Find File             │  󰈞 fd + fzf
+Alt+G          │  Lazygit               │  󰊢 lazygit
+Alt+K          │  VS Code               │  󰨞 code
+Alt+N          │  Neovim                │   nvim
+Alt+S          │  SuperFiles            │  󰉋 spf
+Alt+T          │  Tmux Manager          │   tij
+Alt+Z          │  Zellij Manager        │   zij
+Alt+? / Alt+/  │  Keybind Helper        │  󰌌 keybind-help
+EOF
+)
+
+ gum style \
+  --foreground "$PINK" \
+  --bold \
+  '󰀻  CUSTOM SHORTCUTS'
+
+gum style \
+    --foreground "$WHITE" \
+    --padding "1 4" \
+    --width 78 \
+    "$CUSTOM"
+
+echo
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Zsh defaults
+# ─────────────────────────────────────────────────────────────────────────────
+
+ZSH=$(cat <<'EOF'
+Ctrl+A       │  Beginning of line
+Ctrl+E       │  End of line
+Ctrl+B       │  Backward character
+Ctrl+F       │  Forward character
+Ctrl+W       │  Delete previous word
+Ctrl+U       │  Delete to beginning
+Ctrl+K       │  Delete to end
+Ctrl+Y       │  Paste deleted text
+Ctrl+L       │  Clear screen
+Ctrl+R       │  Search history
+Ctrl+C       │  Cancel command
+Ctrl+D       │  EOF / Exit
+Ctrl+_       │  Undo
+Ctrl+T       │  Find Directory/File
+
+────────────────────────────────────────────────────────────
+
+Alt+B        │  Previous word
+Alt+D        │  Delete next word
+Alt+U        │  Uppercase word
+Alt+L        │  Lowercase word
+Alt+C        │  Find Directory
+EOF
+)
+
+  gum style \
+    --foreground "$CYAN" \
+    --bold \
+    '󰆍  ZSH DEFAULTS'
+
+gum style \
+    --foreground "$WHITE" \
+    --padding "1 4" \
+    --width 78 \
+    "$ZSH"
+
+echo
+
+# ─────────────────────────────────────────────────────────────
+# FZF widgets
+# ─────────────────────────────────────────────────────────────
+
+FZF=$(cat <<'EOF'
+Ctrl+Alt+F    │  File / Directory Picker   │  󰈞 fzf + fd
+Ctrl+Alt+L    │  Git Log Search            │  󰊢 fzf + git
+Ctrl+Alt+V    │  Shell Variables           │  󰘳 fzf Variables
+** + Tab      │  FZF Completion            │  󰜎 fuzzy completion
+Tab           │  Zsh Completion            │  󰆍 standard completion
+Shift+Tab     │  Previous Completion       │  󰌑 reverse selection
+EOF
+)
+
+gum style \
+    --foreground "$GREEN" \
+    --bold \
+    '󰈞  FZF & COMPLETION'
+
+gum style \
+    --foreground "$WHITE" \
+    --padding "1 4" \
+    --width 78 \
+    "$FZF"
+
+echo
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Legend
+# ─────────────────────────────────────────────────────────────────────────────
+
+gum style \
+    --foreground "$DIM" \
+    --align center \
+    --width 78 \
+    '󰌌 KEYBOARD    󰆍 SHELL    󰊢 GIT    󰘳 NAVIGATION'
+
+echo
+
+

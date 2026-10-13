@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+
+# ===================================================================== #
+#                               SERVER                                  # 
+# ===================================================================== #
+# Start a local dev server (node, npm, hugo, python, uv, php, mkdocs).  #
+# Pick the service with fzf, styled with gum.                           #
+# ===================================================================== #
+
+DEFAULT_PORT=8000
+SEP="────────────────────────────────────────────────────────"
+
+# Catppuccin Mocha
+BLUE="\033[38;2;137;180;250m"
+CYAN="\033[38;2;137;220;235m"
+GREEN="\033[38;2;166;227;161m"
+MAUVE="\033[38;2;203;166;247m"
+RED="\033[38;2;243;139;168m"
+YELLOW="\033[38;2;249;226;175m"
+TEXT="\033[38;2;205;214;244m"
+SUBTEXT="\033[38;2;166;173;200m"
+DIM="\033[38;2;108;112;134m"
+RESET="\033[0m"
+
+SERVICE_ORDER=(node npm hugo python uv php mkdocs)
+declare -A DESC=(
+    [node]="npx http-server"
+    [npm]="npx serve"
+    [hugo]="Hugo static site server"
+    [python]="Python built-in HTTP server"
+    [uv]="uv-run Python HTTP server"
+    [php]="PHP built-in web server"
+    [mkdocs]="MkDocs documentation server"
+)
+declare -A BIN=(
+    [node]="npx" [npm]="npx" [hugo]="hugo"
+    [python]="python" [uv]="uv" [php]="php" [mkdocs]="uv"
+)
+
+die() {
+    echo
+    printf "  ${RED}✗${RESET} ${TEXT}%s${RESET}\n" "$1"
+    echo
+    exit 1
+}
+
+usage() {
+    cat <<'EOF'
+Usage:
+  server [service] [options]
+  server [service] [port] [path]
+
+Start a local development server.
+
+Services:
+  node      npx http-server
+  npm       npx serve
+  hugo      hugo server
+  python    python -m http.server
+  uv        uv run python -m http.server
+  php       php -S
+  mkdocs    uv run mkdocs serve
+
+Options:
+  -p, --port PORT     Port to listen on    (default: 8000)
+  -d, --dir PATH      Directory to serve   (default: .)
+  -l, --list          List available services
+  -h, --help          Show this help
+
+Examples:
+  server                    pick a service with fzf
+  server python             python server on :8000
+  server node 3000          node server on :3000
+  server hugo 1313 ./site   hugo serving ./site on :1313
+EOF
+}
+
+list_services() {
+    echo
+    printf "  ${MAUVE}◆${RESET} ${TEXT}server${RESET} ${DIM}·${RESET} ${SUBTEXT}available services${RESET}\n"
+    echo
+    printf "  ${DIM}%s${RESET}\n" "$SEP"
+    for svc in "${SERVICE_ORDER[@]}"; do
+        printf "  ${BLUE}󰈔${RESET}  ${TEXT}%-8s${RESET} ${DIM}·${RESET} ${SUBTEXT}%s${RESET}\n" "$svc" "${DESC[$svc]}"
+    done
+    printf "  ${DIM}%s${RESET}\n" "$SEP"
+    echo
+}
+
+# ------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------
+for cmd in fzf gum; do
+    command -v "$cmd" &>/dev/null || die "Missing dependency: $cmd"
+done
+
+# ------------------------------------------------------------
+# Arguments
+# ------------------------------------------------------------
+SERVICE=""
+PORT="$DEFAULT_PORT"
+PATH_ARG="."
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -p|--port)       [[ -n "${2:-}" ]] || die "Option $1 requires a value"; PORT="$2"; shift 2 ;;
+        -d|--dir|--path) [[ -n "${2:-}" ]] || die "Option $1 requires a value"; PATH_ARG="$2"; shift 2 ;;
+        -l|--list)       list_services; exit 0 ;;
+        -h|--help)       usage; exit 0 ;;
+        --)                shift; while [[ $# -gt 0 ]]; do POSITIONAL+=("$1"); shift; done ;;
+        -*)                die "Unknown option: $1" ;;
+        *)                 POSITIONAL+=("$1"); shift ;;
+    esac
+done
+
+# Positional: [service] [port|path] [path]
+[[ ${#POSITIONAL[@]} -ge 1 ]] && SERVICE="${POSITIONAL[0]}"
+if [[ ${#POSITIONAL[@]} -ge 2 ]]; then
+    if [[ "${POSITIONAL[1]}" =~ ^[0-9]+$ ]]; then PORT="${POSITIONAL[1]}"
+    else PATH_ARG="${POSITIONAL[1]}"; fi
+fi
+[[ ${#POSITIONAL[@]} -ge 3 ]] && PATH_ARG="${POSITIONAL[2]}"
+
+# ------------------------------------------------------------
+# Validate port + path
+# ------------------------------------------------------------
+[[ "$PORT" =~ ^[0-9]+$ ]] && (( 10#$PORT >= 1 && 10#$PORT <= 65535 )) || die "Invalid port: $PORT (must be 1-65535)"
+[[ -d "$PATH_ARG" ]] || die "Path not found or not a directory: $PATH_ARG"
+resolved_path=$(cd "$PATH_ARG" && pwd)
+
+# ------------------------------------------------------------
+# Select service (fzf) if not provided
+# ------------------------------------------------------------
+if [[ -z "$SERVICE" ]]; then
+    export _SRV_PATH="$resolved_path"
+    export _SRV_PORT="$PORT"
+
+    PREVIEW='case {} in
+node)     printf "  \033[38;2;108;112;134mcmd\033[0m  npx http-server \"%s\" -p %s\n" "$_SRV_PATH" "$_SRV_PORT" ;;
+npm)      printf "  \033[38;2;108;112;134mcmd\033[0m  npx serve \"%s\" -l %s\n" "$_SRV_PATH" "$_SRV_PORT" ;;
+hugo)     printf "  \033[38;2;108;112;134mcmd\033[0m  hugo server --source \"%s\"\n            --port %s --bind localhost --disableLiveReload\n" "$_SRV_PATH" "$_SRV_PORT" ;;
+python)   printf "  \033[38;2;108;112;134mcmd\033[0m  python -m http.server %s --directory \"%s\"\n" "$_SRV_PORT" "$_SRV_PATH" ;;
+uv)       printf "  \033[38;2;108;112;134mcmd\033[0m  uv run python -m http.server %s --directory \"%s\"\n" "$_SRV_PORT" "$_SRV_PATH" ;;
+php)      printf "  \033[38;2;108;112;134mcmd\033[0m  php -S localhost:%s -t \"%s\"\n" "$_SRV_PORT" "$_SRV_PATH" ;;
+mkdocs)   printf "  \033[38;2;108;112;134mcmd\033[0m  (cd \"%s\" && uv run mkdocs serve\n            --dirtyreload --livereload --dev-addr localhost:%s)\n" "$_SRV_PATH" "$_SRV_PORT" ;;
+esac'
+
+    SERVICE=$(
+        printf '%s\n' "${SERVICE_ORDER[@]}" | fzf \
+            --height=40% \
+            --prompt="  󰈔  " \
+            --border=rounded \
+            --border-label=" server " \
+            --border-label-pos=2 \
+            --reverse \
+            --header=" ↑↓ navigate  •  enter select  •  esc cancel " \
+            --pointer="▸" \
+            --marker="◆" \
+            --color="bg+:#313244,bg:#11111b,spinner:#f5c2e7,hl:#f38ba8,fg:#cdd6f4,header:#7f849c,pointer:#a6e3a1,marker:#f5c2e7,fg+:#cdd6f4,prompt:#89b4fa,hl+:#f38a8a,border:#585b70" \
+            --preview="$PREVIEW" \
+            --preview-window='right:60%:wrap'
+    )
+    [[ -n "$SERVICE" ]] || exit 0
+fi
+
+# ------------------------------------------------------------
+# Validate service
+# ------------------------------------------------------------
+[[ -n "${BIN[$SERVICE]:-}" ]] || {
+    echo
+    printf "  ${RED}✗${RESET} ${TEXT}Unknown service: ${TEXT}%s${RESET}\n" "$SERVICE"
+    printf "  ${DIM}Available: %s${RESET}\n" "${SERVICE_ORDER[*]}"
+    echo
+    exit 1
+}
+
+# ------------------------------------------------------------
+# Check the required binary
+# ------------------------------------------------------------
+if command -v which &>/dev/null; then
+    BIN_PATH=$(gum spin --spinner dot --title "  Checking ${BIN[$SERVICE]}..." -- which "${BIN[$SERVICE]}" | head -n1)
+else
+    BIN_PATH=$(command -v "${BIN[$SERVICE]}" | head -n1)
+fi
+[[ -n "$BIN_PATH" ]] || die "Required command not found: ${BIN[$SERVICE]}"
+
+# ------------------------------------------------------------
+# Header
+# ------------------------------------------------------------
+clear
+{
+    printf "${MAUVE}◆${RESET} ${TEXT}server${RESET} ${DIM}·${RESET} ${SUBTEXT}local dev servers${RESET}\n"
+    printf "${BLUE}󰈔${RESET}  ${TEXT}%s${RESET}\n" "$SERVICE"
+    printf "${DIM}%-5s${RESET}  ${SUBTEXT}%s${RESET}\n" "path" "$resolved_path"
+    printf "${DIM}%-5s${RESET}  ${SUBTEXT}%s${RESET}\n" "port" "$PORT"
+    printf "${DIM}%-5s${RESET}  ${SUBTEXT}%s${RESET}\n" "bin" "$BIN_PATH"
+    printf "${DIM}%-5s${RESET}  ${CYAN}%s${RESET}\n" "url" "http://localhost:$PORT"
+} | gum style --border rounded --border-foreground "#585b70" --padding "1 2" --margin "1 0"
+
+echo
+printf "  ${YELLOW}󰑓${RESET}  ${SUBTEXT}Press Ctrl+C to stop the server${RESET}\n"
+echo
+
+# ------------------------------------------------------------
+# Run server
+# ------------------------------------------------------------
+INTERRUPTED=0
+trap 'INTERRUPTED=1' INT TERM
+
+case "$SERVICE" in
+    node)   npx http-server "$resolved_path" -p "$PORT" ;;
+    npm)    npx serve "$resolved_path" -l "$PORT" ;;
+    hugo)   hugo server --source "$resolved_path" --port "$PORT" --bind localhost --disableLiveReload ;;
+    python) python -m http.server "$PORT" --directory "$resolved_path" ;;
+    uv)     uv run python -m http.server "$PORT" --directory "$resolved_path" ;;
+    php)    php -S "localhost:$PORT" -t "$resolved_path" ;;
+    mkdocs) (cd "$resolved_path" && exec uv run mkdocs serve --dirtyreload --livereload --dev-addr "localhost:$PORT") ;;
+esac > /dev/null 2>&1
+STATUS=$?
+
+# ------------------------------------------------------------
+# Footer
+# ------------------------------------------------------------
+#echo
+#if (( INTERRUPTED )); then
+#    printf "${GREEN}◆${RESET} ${SUBTEXT}Server stopped${RESET}\n" |
+#        gum style --border rounded --border-foreground "#585b70" --padding "0 2" --margin "1 0"
+#else
+#    printf "${DIM}◆${RESET} ${SUBTEXT}Server exited (code %s)${RESET}\n" "$STATUS" |
+#        gum style --border rounded --border-foreground "#585b70" --padding "0 2" --margin "1 0"
+#fi
+#echo
+
+exit "$STATUS"

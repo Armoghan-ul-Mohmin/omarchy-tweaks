@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+display=$(
+    tmux list-sessions \
+        -F '#{session_name}|#{session_attached}|#{session_windows}|#{session_created_string}' \
+        2>/dev/null |
+    while IFS='|' read -r name attached windows created; do
+
+        if [[ "$attached" == "1" ]]; then
+            printf "● ATTACHED   %-25s %-11s %s\n" \
+                "$name" "$windows" "$created"
+        else
+            printf "○ DETACHED   %-25s %-11s %s\n" \
+                "$name" "$windows" "$created"
+        fi
+
+    done
+)
+
+if [[ -z "$display" ]]; then
+    gum style \
+        --border rounded \
+        --border-foreground 81 \
+        --padding "1 2" \
+        --foreground 8 \
+        "No tmux sessions found."
+    exit 0
+fi
+
+gum style \
+    --border rounded \
+    --border-foreground 81 \
+    --padding "0 2" \
+    --bold \
+    --foreground 81 \
+    "TMUX SESSIONS"
+
+printf '\n'
+
+printf "  \033[2m%-14s %-25s %-11s %s\033[0m\n" \
+    "STATUS" "SESSION" "WINDOWS" "CREATED"
+
+printf "  \033[2m%s\033[0m\n" \
+    "────────────────────────────────────────────────────────────────"
+
+selected=$(printf '%s\n' "$display" | gum choose)
+
+[[ -z "$selected" ]] && exit 0
+
+session_name=$(printf '%s\n' "$selected" | awk '{print $3}')
+
+[[ -z "$session_name" ]] && exit 1
+
+exec tmux attach-session -t "$session_name"

@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+clear
+
+WORKBENCH="/usr/share/code/resources/app/out/vs/code/electron-browser/workbench"
+
+# ─────────────────────────────────────────────
+# Colors / UI
+# ─────────────────────────────────────────────
+
+if ! command -v gum &>/dev/null; then
+    echo "Error: gum is not installed."
+    exit 1
+fi
+
+gum style \
+    --border double \
+    --border-foreground 212 \
+    --padding "1 2" \
+    --margin "1" \
+    "VS Code Custom CSS Fixer" \
+    "" \
+    "Restore permissions required by" \
+    "Custom CSS and JS Loader"
+
+echo
+
+# ─────────────────────────────────────────────
+# Check VS Code
+# ─────────────────────────────────────────────
+
+if [[ ! -d "/usr/share/code" ]]; then
+    gum style \
+        --foreground 196 \
+        "✗ VS Code installation directory not found:"
+        "/usr/share/code"
+    exit 1
+fi
+
+if [[ ! -d "$WORKBENCH" ]]; then
+    gum style \
+        --foreground 196 \
+        "✗ VS Code workbench directory not found." \
+        "" \
+        "VS Code may have changed its installation layout."
+    exit 1
+fi
+
+# ─────────────────────────────────────────────
+# Show current state
+# ─────────────────────────────────────────────
+
+OWNER=$(stat -c '%U:%G' "$WORKBENCH")
+
+gum style \
+    --border rounded \
+    --border-foreground 240 \
+    --padding "0 2" \
+    "Current owner: $OWNER"
+
+echo
+
+if [[ "$OWNER" == "$(whoami):$(id -gn)" ]]; then
+    gum style \
+        --foreground 82 \
+        "✓ Permissions already look correct."
+
+    echo
+
+    if gum confirm "Restart VS Code now?"; then
+        pkill -x code 2>/dev/null || true
+        gum spin --spinner dot --title "Starting VS Code..." -- code >/dev/null 2>&1 &
+    fi
+
+    exit 0
+fi
+
+# ─────────────────────────────────────────────
+# Confirmation
+# ─────────────────────────────────────────────
+
+gum style \
+    --foreground 214 \
+    "⚠ Custom CSS needs write access to the VS Code workbench."
+
+echo
+
+if ! gum confirm "Fix permissions for the workbench directory?"; then
+    gum style --foreground 240 "Cancelled."
+    exit 0
+fi
+
+# ─────────────────────────────────────────────
+# Fix
+# ─────────────────────────────────────────────
+
+echo
+
+if sudo chown -R "$(id -u):$(id -g)" "$WORKBENCH"; then
+    gum style \
+        --border rounded \
+        --border-foreground 82 \
+        --padding "1 2" \
+        --foreground 82 \
+        "✓ Permissions fixed!" \
+        "" \
+        "Owner: $(whoami):$(id -gn)" \
+        "Path:  $WORKBENCH"
+else
+    gum style \
+        --border rounded \
+        --border-foreground 196 \
+        --padding "1 2" \
+        --foreground 196 \
+        "✗ Failed to change permissions."
+    exit 1
+fi
+
+echo
+
+# ─────────────────────────────────────────────
+# Finish
+# ─────────────────────────────────────────────
+
+if gum confirm "Restart VS Code to apply the change?"; then
+    gum spin \
+        --spinner dot \
+        --title "Restarting VS Code..." \
+        -- bash -c '
+            pkill -x code 2>/dev/null || true
+            sleep 1
+            code >/dev/null 2>&1 &
+        '
+
+    gum style --foreground 82 "✓ VS Code restarted."
+else
+    gum style \
+        --foreground 214 \
+        "Restart VS Code manually before using Custom CSS."
+fi

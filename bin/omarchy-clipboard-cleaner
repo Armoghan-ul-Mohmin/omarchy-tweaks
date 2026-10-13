@@ -1,0 +1,1128 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# ╭──────────────────────────────────────────────────────────────╮
+# │                  OMARCHY CLIPBOARD                          │
+# │              A tiny clipboard maintenance TUI              │
+# ╰──────────────────────────────────────────────────────────────╯
+
+# ─────────────────────────────────────────────────────────────
+# Paths
+# ─────────────────────────────────────────────────────────────
+
+readonly STATE_DIR="$HOME/.local/state/omarchy"
+
+readonly HISTORY_FILE="$STATE_DIR/clipboard-history.json"
+readonly IMAGE_DIR="$STATE_DIR/clipboard-images"
+readonly OPEN_DIR="$STATE_DIR/clipboard-open"
+
+readonly BACKUP_DIR="$STATE_DIR/clipboard-backups"
+
+# ─────────────────────────────────────────────────────────────
+# Theme
+# ─────────────────────────────────────────────────────────────
+
+readonly BLUE="39"
+readonly CYAN="51"
+readonly GREEN="42"
+readonly RED="196"
+readonly YELLOW="220"
+readonly MAGENTA="207"
+readonly GRAY="245"
+readonly WHITE="255"
+
+# ─────────────────────────────────────────────────────────────
+# Dependencies
+# ─────────────────────────────────────────────────────────────
+
+for cmd in gum jq find du tar mktemp; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        printf '\nMissing dependency: %s\n\n' "$cmd"
+        exit 1
+    fi
+done
+
+# ─────────────────────────────────────────────────────────────
+# Generic helpers
+# ─────────────────────────────────────────────────────────────
+
+clear_screen() {
+    printf '\033c'
+}
+
+pause() {
+    echo
+    gum style \
+        --foreground "$GRAY" \
+        "Press Enter to continue..."
+
+    read -r
+}
+
+success() {
+    gum style \
+        --foreground "$GREEN" \
+        --bold \
+        "  ✓  $*"
+}
+
+warning() {
+    gum style \
+        --foreground "$YELLOW" \
+        --bold \
+        "  !  $*"
+}
+
+error() {
+    gum style \
+        --foreground "$RED" \
+        --bold \
+        "  ✗  $*"
+}
+
+info() {
+    gum style \
+        --foreground "$CYAN" \
+        "  •  $*"
+}
+
+# ─────────────────────────────────────────────────────────────
+# Statistics
+# ─────────────────────────────────────────────────────────────
+
+history_count() {
+    if [[ -f "$HISTORY_FILE" ]] &&
+       jq -e 'type == "array"' "$HISTORY_FILE" >/dev/null 2>&1; then
+        jq 'length' "$HISTORY_FILE"
+    else
+        echo 0
+    fi
+}
+
+history_size() {
+    [[ -f "$HISTORY_FILE" ]] &&
+        du -h "$HISTORY_FILE" | awk '{print $1}' ||
+        echo "0 B"
+}
+
+image_count() {
+    [[ -d "$IMAGE_DIR" ]] &&
+        find "$IMAGE_DIR" -type f 2>/dev/null | wc -l ||
+        echo 0
+}
+
+image_size() {
+    [[ -d "$IMAGE_DIR" ]] &&
+        du -sh "$IMAGE_DIR" 2>/dev/null | awk '{print $1}' ||
+        echo "0 B"
+}
+
+open_count() {
+    [[ -d "$OPEN_DIR" ]] &&
+        find "$OPEN_DIR" -type f 2>/dev/null | wc -l ||
+        echo 0
+}
+
+open_size() {
+    [[ -d "$OPEN_DIR" ]] &&
+        du -sh "$OPEN_DIR" 2>/dev/null | awk '{print $1}' ||
+        echo "0 B"
+}
+
+backup_count() {
+    [[ -d "$BACKUP_DIR" ]] &&
+        find "$BACKUP_DIR" \
+            -maxdepth 1 \
+            -type f \
+            -name '*.tar.gz' |
+            wc -l ||
+        echo 0
+}
+
+# ─────────────────────────────────────────────────────────────
+# Header / Dashboard
+# ─────────────────────────────────────────────────────────────
+
+dashboard() {
+    clear_screen
+
+    local history images open backups
+
+    history="$(history_count)"
+    images="$(image_count)"
+    open="$(open_count)"
+    backups="$(backup_count)"
+
+    gum style \
+        --border double \
+        --border-foreground "$BLUE" \
+        --padding "1 4" \
+        --margin "1" \
+        --align center \
+        "$(gum style \
+            --foreground "$CYAN" \
+            --bold \
+            'OMARCHY CLIPBOARD')" \
+        "$(gum style \
+            --foreground "$GRAY" \
+            'clipboard history maintenance')"
+
+    printf '\n'
+
+    gum join --horizontal \
+        "$(gum style \
+            --border rounded \
+            --border-foreground "$BLUE" \
+            --padding "0 2" \
+            "$(gum style --foreground "$GRAY" 'TEXT')" \
+            "$(gum style --foreground "$WHITE" --bold "$history entries")" \
+            "$(gum style --foreground "$GRAY" "$(history_size)")")" \
+        "  " \
+        "$(gum style \
+            --border rounded \
+            --border-foreground "$MAGENTA" \
+            --padding "0 2" \
+            "$(gum style --foreground "$GRAY" 'IMAGES')" \
+            "$(gum style --foreground "$WHITE" --bold "$images files")" \
+            "$(gum style --foreground "$GRAY" "$(image_size)")")" \
+        "  " \
+        "$(gum style \
+            --border rounded \
+            --border-foreground "$YELLOW" \
+            --padding "0 2" \
+            "$(gum style --foreground "$GRAY" 'OPEN')" \
+            "$(gum style --foreground "$WHITE" --bold "$open files")" \
+            "$(gum style --foreground "$GRAY" "$(open_size)")")"
+
+    printf '\n'
+
+    gum style \
+        --foreground "$GRAY" \
+        "  Backups: $backups"
+
+    printf '\n'
+}
+
+# ─────────────────────────────────────────────────────────────
+# Validate history
+# ─────────────────────────────────────────────────────────────
+
+history_valid() {
+    [[ -f "$HISTORY_FILE" ]] || return 1
+
+    jq -e '
+        type == "array"
+        and all(.[];
+            type == "object"
+            and has("type")
+            and has("text")
+        )
+    ' "$HISTORY_FILE" >/dev/null 2>&1
+}
+
+# ─────────────────────────────────────────────────────────────
+# Backup
+# ─────────────────────────────────────────────────────────────
+
+backup() {
+    mkdir -p "$BACKUP_DIR"
+
+    local timestamp backup tmp
+
+    timestamp="$(date '+%Y-%m-%d_%H-%M-%S')"
+    backup="$BACKUP_DIR/clipboard-$timestamp.tar.gz"
+    tmp="$(mktemp -d)"
+
+    trap 'rm -rf "$tmp"' RETURN
+
+    [[ -f "$HISTORY_FILE" ]] &&
+        cp -a "$HISTORY_FILE" "$tmp/"
+
+    [[ -d "$IMAGE_DIR" ]] &&
+        cp -a "$IMAGE_DIR" "$tmp/"
+
+    [[ -d "$OPEN_DIR" ]] &&
+        cp -a "$OPEN_DIR" "$tmp/"
+
+    gum spin \
+        --spinner dot \
+        --title "Creating backup..." \
+        -- \
+        tar -czf "$backup" -C "$tmp" .
+
+    success "Backup created"
+
+    gum style \
+        --foreground "$GRAY" \
+        "     $backup"
+
+    echo "$backup"
+}
+
+# ─────────────────────────────────────────────────────────────
+# Ask about backup
+# ─────────────────────────────────────────────────────────────
+
+backup_before_delete() {
+    echo
+
+    if gum confirm \
+        --affirmative "Yes, create backup" \
+        --negative "No backup"; then
+
+        backup >/dev/null
+        return 0
+    fi
+
+    warning "No backup will be created."
+
+    gum confirm \
+        --affirmative "Continue" \
+        --negative "Cancel"
+}
+
+# ─────────────────────────────────────────────────────────────
+# Preview clipboard entry
+# ─────────────────────────────────────────────────────────────
+
+preview() {
+    local index="$1"
+
+    clear_screen
+
+    local type text
+
+    type="$(jq -r --argjson i "$index" '.[$i].type // "unknown"' "$HISTORY_FILE")"
+    text="$(jq -r --argjson i "$index" '.[$i].text // ""' "$HISTORY_FILE")"
+
+    gum style \
+        --border rounded \
+        --border-foreground "$CYAN" \
+        --padding "1 3" \
+        "$(gum style \
+            --foreground "$CYAN" \
+            --bold \
+            "Clipboard #$((index + 1))")" \
+        "$(gum style \
+            --foreground "$GRAY" \
+            "Type: $type")"
+
+    echo
+
+    gum style \
+        --border normal \
+        --border-foreground "$GRAY" \
+        --padding "1 2" \
+        "$text"
+
+    echo
+}
+
+# ─────────────────────────────────────────────────────────────
+# Interactive text browser
+# ─────────────────────────────────────────────────────────────
+
+browse_text() {
+    if ! history_valid; then
+        error "clipboard-history.json is missing or invalid."
+        pause
+        return
+    fi
+
+    while true; do
+        dashboard
+
+        local count
+        count="$(history_count)"
+
+        if [[ "$count" -eq 0 ]]; then
+            gum style \
+                --foreground "$GRAY" \
+                --align center \
+                "Clipboard history is empty."
+
+            pause
+            return
+        fi
+
+        # Create an index + preview list.
+        local tmp
+        tmp="$(mktemp)"
+
+        jq -r '
+            to_entries[]
+            | [
+                (.key | tostring),
+                (
+                    .value.text
+                    | gsub("\r"; "")
+                    | gsub("\n"; " ↵ ")
+                    | if length > 100
+                      then .[0:97] + "..."
+                      else .
+                      end
+                )
+              ]
+            | @tsv
+        ' "$HISTORY_FILE" > "$tmp"
+
+        gum style \
+            --foreground "$GRAY" \
+            "  Search your clipboard. Type to filter."
+
+        echo
+
+        local selected
+        selected="$(
+            gum filter \
+                --height 18 \
+                --placeholder "Search clipboard history..." \
+                --no-limit \
+                < <(
+                    awk -F '\t' '
+                        {
+                            printf "#%-4s  %s\n", $1 + 1, $2
+                        }
+                    ' "$tmp"
+                )
+        )" || true
+
+        rm -f "$tmp"
+
+        [[ -z "$selected" ]] && return
+
+        # Extract displayed number.
+        local number
+        number="$(sed -E 's/^#([0-9]+).*/\1/' <<< "$selected")"
+
+        # Convert human index to zero-based index.
+        local index
+        index=$((number - 1))
+
+        preview "$index"
+
+        local action
+
+        action="$(gum choose \
+            --header "What do you want to do with this entry?" \
+            "Delete this entry" \
+            "Keep this entry" \
+            "Back")"
+
+        case "$action" in
+            "Delete this entry")
+                delete_single_text "$index"
+                ;;
+
+            "Keep this entry")
+                info "Entry kept."
+                pause
+                ;;
+
+            *)
+                continue
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────
+# Delete one text entry
+# ─────────────────────────────────────────────────────────────
+
+delete_single_text() {
+    local index="$1"
+
+    local text
+    text="$(jq -r --argjson i "$index" '.[$i].text // ""' "$HISTORY_FILE")"
+
+    echo
+
+    gum style \
+        --foreground "$RED" \
+        --bold \
+        "Delete this clipboard entry?"
+
+    echo
+
+    gum style \
+        --foreground "$GRAY" \
+        --padding "0 2" \
+        "$(sed 's/^/│ /' <<< "$text")"
+
+    echo
+
+    if ! gum confirm \
+        --affirmative "Delete it" \
+        --negative "Keep it"; then
+
+        info "Entry kept."
+        pause
+        return
+    fi
+
+    if ! backup_before_delete; then
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    local tmp
+    tmp="$(mktemp)"
+
+    if ! jq --argjson i "$index" 'del(.[$i])' \
+        "$HISTORY_FILE" > "$tmp"; then
+
+        rm -f "$tmp"
+        error "Could not modify clipboard history."
+        pause
+        return
+    fi
+
+    if ! jq -e 'type == "array"' "$tmp" >/dev/null; then
+        rm -f "$tmp"
+        error "Generated JSON failed validation."
+        pause
+        return
+    fi
+
+    chmod --reference="$HISTORY_FILE" "$tmp" 2>/dev/null || true
+
+    mv -- "$tmp" "$HISTORY_FILE"
+
+    success "Clipboard entry deleted."
+    pause
+}
+
+# ─────────────────────────────────────────────────────────────
+# Delete multiple text entries
+# ─────────────────────────────────────────────────────────────
+
+delete_multiple_text() {
+    if ! history_valid; then
+        error "clipboard-history.json is missing or invalid."
+        pause
+        return
+    fi
+
+    local count
+    count="$(history_count)"
+
+    [[ "$count" -gt 0 ]] || {
+        warning "Clipboard history is empty."
+        pause
+        return
+    }
+
+    dashboard
+
+    local tmp
+    tmp="$(mktemp)"
+
+    jq -r '
+        to_entries[]
+        | [
+            (.key | tostring),
+            (
+                .value.text
+                | gsub("\r"; "")
+                | gsub("\n"; " ↵ ")
+                | if length > 90
+                  then .[0:87] + "..."
+                  else .
+                  end
+            )
+          ]
+        | @tsv
+    ' "$HISTORY_FILE" > "$tmp"
+
+    gum style \
+        --foreground "$GRAY" \
+        "Select entries to delete."
+
+    gum style \
+        --foreground "$GRAY" \
+        "Use Space to select and Enter to continue."
+
+    echo
+
+    local selected
+    selected="$(
+        awk -F '\t' '{ printf "#%-4s  %s\n", $1 + 1, $2 }' "$tmp" |
+            gum choose \
+                --no-limit \
+                --height 18 \
+                --selected-prefix "● " \
+                --unselected-prefix "○ "
+    )" || true
+
+    rm -f "$tmp"
+
+    [[ -z "$selected" ]] && {
+        info "Nothing selected."
+        pause
+        return
+    }
+
+    local indexes
+    indexes="$(
+        sed -E 's/^#([0-9]+).*/\1/' <<< "$selected" |
+            awk '{ print $1 - 1 }'
+    )"
+
+    echo
+
+    gum style \
+        --foreground "$RED" \
+        --bold \
+        "The following entries will be deleted:"
+
+    echo
+
+    while IFS= read -r index; do
+        gum style \
+            --foreground "$GRAY" \
+            "  #$((index + 1))  $(jq -r --argjson i "$index" '.[$i].text' "$HISTORY_FILE" | tr '\n' ' ' | cut -c1-100)"
+    done <<< "$indexes"
+
+    echo
+
+    if ! gum confirm \
+        --affirmative "Delete selected entries" \
+        --negative "Cancel"; then
+
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    if ! backup_before_delete; then
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    # Delete from largest index to smallest index.
+    local filter='.'
+    local index
+
+    while IFS= read -r index; do
+        filter="$filter | del(.[$index])"
+    done < <(printf '%s\n' "$indexes" | sort -rn)
+
+    local result
+    result="$(mktemp)"
+
+    if ! jq "$filter" "$HISTORY_FILE" > "$result"; then
+        rm -f "$result"
+        error "Failed to modify clipboard history."
+        pause
+        return
+    fi
+
+    if ! jq -e 'type == "array"' "$result" >/dev/null; then
+        rm -f "$result"
+        error "Generated JSON failed validation."
+        pause
+        return
+    fi
+
+    chmod --reference="$HISTORY_FILE" "$result" 2>/dev/null || true
+
+    mv -- "$result" "$HISTORY_FILE"
+
+    local deleted
+    deleted="$(wc -l <<< "$indexes")"
+
+    echo
+    success "Deleted $deleted clipboard entries."
+
+    pause
+}
+
+# ─────────────────────────────────────────────────────────────
+# Clear all text
+# ─────────────────────────────────────────────────────────────
+
+clear_text() {
+    dashboard
+
+    local count
+    count="$(history_count)"
+
+    if [[ "$count" -eq 0 ]]; then
+        warning "Text clipboard history is already empty."
+        pause
+        return
+    fi
+
+    gum style \
+        --border rounded \
+        --border-foreground "$RED" \
+        --padding "1 3" \
+        "$(gum style --foreground "$RED" --bold 'CLEAR TEXT HISTORY')" \
+        "" \
+        "$(gum style --foreground "$GRAY" "This will remove all $count text entries.")" \
+        "$(gum style --foreground "$GRAY" "The JSON file itself will be preserved.")"
+
+    echo
+
+    if ! gum confirm \
+        --affirmative "Clear all text history" \
+        --negative "Cancel"; then
+
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    if ! backup_before_delete; then
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    local tmp
+    tmp="$(mktemp)"
+
+    printf '[]\n' > "$tmp"
+
+    chmod --reference="$HISTORY_FILE" "$tmp" 2>/dev/null || true
+
+    mv -- "$tmp" "$HISTORY_FILE"
+
+    success "All text clipboard history cleared."
+
+    pause
+}
+
+# ─────────────────────────────────────────────────────────────
+# Text menu
+# ─────────────────────────────────────────────────────────────
+
+text_menu() {
+    while true; do
+        dashboard
+
+        local action
+
+        action="$(gum choose \
+            --header "TEXT CLIPBOARD" \
+            "Browse & delete" \
+            "Select multiple to delete" \
+            "Clear all text history" \
+            "Back")"
+
+        case "$action" in
+            "Browse & delete")
+                browse_text
+                ;;
+
+            "Select multiple to delete")
+                delete_multiple_text
+                ;;
+
+            "Clear all text history")
+                clear_text
+                ;;
+
+            *)
+                return
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────
+# Images
+# ─────────────────────────────────────────────────────────────
+
+clear_images() {
+    dashboard
+
+    local count size
+    count="$(image_count)"
+    size="$(image_size)"
+
+    if [[ "$count" -eq 0 ]]; then
+        warning "No clipboard images found."
+        pause
+        return
+    fi
+
+    gum style \
+        --border rounded \
+        --border-foreground "$MAGENTA" \
+        --padding "1 3" \
+        "$(gum style --foreground "$MAGENTA" --bold 'CLIPBOARD IMAGES')" \
+        "" \
+        "Files: $count" \
+        "Size:  $size"
+
+    echo
+
+    if ! gum confirm \
+        --affirmative "Delete all images" \
+        --negative "Keep images"; then
+
+        info "Images kept."
+        pause
+        return
+    fi
+
+    if ! backup_before_delete; then
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    gum spin \
+        --spinner dot \
+        --title "Deleting clipboard images..." \
+        -- \
+        bash -c '
+            find "$1" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+        ' _ "$IMAGE_DIR"
+
+    success "Deleted $count clipboard images."
+
+    pause
+}
+
+# ─────────────────────────────────────────────────────────────
+# clipboard-open
+# ─────────────────────────────────────────────────────────────
+
+clear_open() {
+    dashboard
+
+    local count size
+    count="$(open_count)"
+    size="$(open_size)"
+
+    if [[ "$count" -eq 0 ]]; then
+        warning "clipboard-open is already empty."
+        pause
+        return
+    fi
+
+    gum style \
+        --border rounded \
+        --border-foreground "$YELLOW" \
+        --padding "1 3" \
+        "$(gum style --foreground "$YELLOW" --bold 'CLIPBOARD-OPEN')" \
+        "" \
+        "Files: $count" \
+        "Size:  $size"
+
+    echo
+
+    if ! gum confirm \
+        --affirmative "Delete clipboard-open" \
+        --negative "Keep it"; then
+
+        info "clipboard-open kept."
+        pause
+        return
+    fi
+
+    if ! backup_before_delete; then
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    rm -rf -- "$OPEN_DIR"
+
+    success "clipboard-open cleared."
+
+    pause
+}
+
+# ─────────────────────────────────────────────────────────────
+# Nuclear option
+# ─────────────────────────────────────────────────────────────
+
+clear_everything() {
+    dashboard
+
+    gum style \
+        --border double \
+        --border-foreground "$RED" \
+        --padding "1 4" \
+        --align center \
+        "$(gum style --foreground "$RED" --bold '⚠  DANGER ZONE')" \
+        "" \
+        "This can remove ALL clipboard data."
+
+    echo
+
+    local selected
+
+    selected="$(
+        gum choose \
+            --no-limit \
+            --header "What should be deleted?" \
+            --selected-prefix "● " \
+            --unselected-prefix "○ " \
+            "Text history" \
+            "Clipboard images" \
+            "Clipboard-open"
+    )" || true
+
+    [[ -z "$selected" ]] && return
+
+    echo
+
+    gum style \
+        --foreground "$RED" \
+        --bold \
+        "Selected for deletion:"
+
+    while IFS= read -r item; do
+        gum style --foreground "$GRAY" "  ✗ $item"
+    done <<< "$selected"
+
+    echo
+
+    if ! gum confirm \
+        --affirmative "Continue" \
+        --negative "Cancel"; then
+
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    if ! backup_before_delete; then
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    echo
+
+    if ! gum confirm \
+        --affirmative "PERMANENTLY DELETE" \
+        --negative "Cancel"; then
+
+        info "Cancelled."
+        pause
+        return
+    fi
+
+    echo
+
+    if grep -qx "Text history" <<< "$selected"; then
+        if [[ -f "$HISTORY_FILE" ]]; then
+            printf '[]\n' > "$HISTORY_FILE"
+            success "Text history cleared."
+        fi
+    fi
+
+    if grep -qx "Clipboard images" <<< "$selected"; then
+        if [[ -d "$IMAGE_DIR" ]]; then
+            find "$IMAGE_DIR" \
+                -mindepth 1 \
+                -maxdepth 1 \
+                -exec rm -rf -- {} +
+            success "Clipboard images cleared."
+        fi
+    fi
+
+    if grep -qx "Clipboard-open" <<< "$selected"; then
+        if [[ -d "$OPEN_DIR" ]]; then
+            rm -rf -- "$OPEN_DIR"
+            success "clipboard-open cleared."
+        fi
+    fi
+
+    echo
+
+    gum style \
+        --foreground "$GREEN" \
+        --bold \
+        "✓ Clipboard cleanup complete."
+
+    pause
+}
+
+# ─────────────────────────────────────────────────────────────
+# Backup manager
+# ─────────────────────────────────────────────────────────────
+
+backup_menu() {
+    while true; do
+        dashboard
+
+        local action
+
+        action="$(gum choose \
+            --header "BACKUPS" \
+            "Create backup" \
+            "List backups" \
+            "Delete backups" \
+            "Back")"
+
+        case "$action" in
+
+            "Create backup")
+                backup >/dev/null
+                pause
+                ;;
+
+            "List backups")
+                clear_screen
+
+                gum style \
+                    --border rounded \
+                    --border-foreground "$BLUE" \
+                    --padding "1 3" \
+                    "$(gum style --foreground "$BLUE" --bold 'CLIPBOARD BACKUPS')"
+
+                echo
+
+                if [[ -d "$BACKUP_DIR" ]] &&
+                   find "$BACKUP_DIR" \
+                       -maxdepth 1 \
+                       -type f \
+                       -name '*.tar.gz' |
+                       grep -q .; then
+
+                    find "$BACKUP_DIR" \
+                        -maxdepth 1 \
+                        -type f \
+                        -name '*.tar.gz' \
+                        -printf '%TY-%Tm-%Td %TH:%TM  %f\n' |
+                        sort -r |
+                        gum pager
+                else
+                    info "No backups found."
+                fi
+
+                pause
+                ;;
+
+            "Delete backups")
+                if [[ ! -d "$BACKUP_DIR" ]]; then
+                    warning "No backups found."
+                    pause
+                    continue
+                fi
+
+                local backups
+                backups="$(
+                    find "$BACKUP_DIR" \
+                        -maxdepth 1 \
+                        -type f \
+                        -name '*.tar.gz' \
+                        -printf '%f\n' |
+                        sort -r
+                )"
+
+                if [[ -z "$backups" ]]; then
+                    warning "No backups found."
+                    pause
+                    continue
+                fi
+
+                local selected
+                selected="$(
+                    printf '%s\n' "$backups" |
+                        gum choose \
+                            --no-limit \
+                            --header "Select backups to delete"
+                )" || true
+
+                [[ -z "$selected" ]] && continue
+
+                echo
+
+                if gum confirm \
+                    --affirmative "Delete selected backups" \
+                    --negative "Cancel"; then
+
+                    while IFS= read -r file; do
+                        rm -f -- "$BACKUP_DIR/$file"
+                    done <<< "$selected"
+
+                    success "Backups deleted."
+                else
+                    info "Cancelled."
+                fi
+
+                pause
+                ;;
+
+            *)
+                return
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────
+# Main menu
+# ─────────────────────────────────────────────────────────────
+
+main() {
+    [[ -d "$STATE_DIR" ]] || {
+        error "Omarchy state directory not found."
+        exit 1
+    }
+
+    while true; do
+        dashboard
+
+        local action
+
+        action="$(gum choose \
+            --header "MAIN MENU" \
+            "Text clipboard" \
+            "Clipboard images" \
+            "Clipboard-open" \
+            "Clean everything" \
+            "Backup manager" \
+            "Refresh" \
+            "Exit")"
+
+        case "$action" in
+            "Text clipboard")
+                text_menu
+                ;;
+
+            "Clipboard images")
+                clear_images
+                ;;
+
+            "Clipboard-open")
+                clear_open
+                ;;
+
+            "Clean everything")
+                clear_everything
+                ;;
+
+            "Backup manager")
+                backup_menu
+                ;;
+
+            "Refresh")
+                continue
+                ;;
+
+            "Exit"|"")
+                clear_screen
+                gum style \
+                    --foreground "$GREEN" \
+                    --bold \
+                    "✓ Omarchy Clipboard Manager closed."
+                exit 0
+                ;;
+        esac
+    done
+}
+
+main "$@"
+
