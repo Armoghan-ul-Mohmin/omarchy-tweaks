@@ -24,3 +24,6 @@ logs/*
 # Remember file
 .remember
 .claude
+.opencode
+
+session-ses_ec9d.md

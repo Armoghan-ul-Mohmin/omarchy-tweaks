@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+
+#################################################################
+# Global pre-push hook (chains to local)
+#################################################################
+# Runs before pushing refs. Checks upstream status, large files
+# in commits about to be pushed, secret patterns in those commits,
+# and warns about protected branches. Chains to local hook.
+#################################################################
+
+set -uEo pipefail
+export LC_ALL=C
+
+CHAIN_MODE="global-then-local"
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "Not in git repo" >&2; exit 1; }
+cd "$ROOT"
+LOCAL_HOOK="$ROOT/.git/hooks/pre-push"
+
+if [[ "$CHAIN_MODE" == "local-first" && -x "$LOCAL_HOOK" && ! -L "$LOCAL_HOOK" ]]; then
+  "$LOCAL_HOOK" "$@"; exit $?
+fi
+
+if command -v gum >/dev/null 2>&1 && [[ -t 2 ]]; then USE_GUM=1; else USE_GUM=0; fi
+ui() {
+  local k="$1"; shift
+  if (( USE_GUM )); then
+    case "$k" in title) gum style --bold --foreground 212 "$*" ;; ok) gum style --foreground 42 "  [PASS] $*" ;; warn) gum style --foreground 214 "  [WARN] $*" ;; fail) gum style --bold --foreground 196 "  [FAIL] $*" ;; info) gum style --foreground 39 "  [INFO] $*" ;; *) printf '  %s\n' "$*" >&2 ;; esac
+  else
+    case "$k" in ok) printf '  [PASS] %s\n' "$*" >&2 ;; warn) printf '  [WARN] %s\n' "$*" >&2 ;; fail) printf '  [FAIL] %s\n' "$*" >&2 ;; info) printf '  [INFO] %s\n' "$*" >&2 ;; *) printf '%s\n' "$*" >&2 ;; esac
+  fi
+}
+
+ui title "Global pre-push checks"
+FAILED=0; WARNINGS=0
+failf() { ui fail "$*"; FAILED=$((FAILED+1)); }
+warnf() { ui warn "$*"; WARNINGS=$((WARNINGS+1)); }
+pass() { ui ok "$*"; }
+
+# read refs from stdin
+z40=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [[ -n "$local_sha" && "$local_sha" != "$z40" ]] || continue
+
+  # check if pushing to protected branches
+  protected=("main" "master" "develop" "release/*" "prod" "production")
+  for p in "${protected[@]}"; do
+    if [[ "$remote_ref" == "refs/heads/$p" || "$remote_ref" == "refs/heads/*$p*" ]]; then
+      warnf "Pushing to protected branch: $remote_ref"
+    fi
+  done
+
+  # range of commits
+  if [[ "$remote_sha" == "$z40" ]]; then
+    range="$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  # check large files in pushed commits (approx by blobs)
+  MAX_MB="${MAX_PUSH_FILE_MB:-10}"; MAX_B=$((MAX_MB*1024*1024))
+  while read -r f; do
+    [[ -z "$f" ]] && continue
+    # find blob sizes in range - rough
+    git rev-list --objects "$range" 2>/dev/null | awk '{print $1,$2}' | while read -r sha fp; do
+      [[ -z "$fp" ]] && continue
+      sz="$(git cat-file -s "$sha" 2>/dev/null || echo 0)"
+      [[ "$sz" =~ ^[0-9]+$ ]] && (( sz > MAX_B )) && failf "Large blob in push: $fp (${sz} bytes)"
+    done || true
+  done < <(git rev-list --objects "$range" --not --all 2>/dev/null | cut -d' ' -f2 | sort -u)
+
+  # secret scan in diff of range (heuristic)
+  SECRET_PATTERNS=(
+    '-----BEGIN (RSA |DSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----'
+    'AKIA[0-9A-Z]{16}'
+    'gh[pousr]_[A-Za-z0-9_]{20,}'
+    'github_pat_[A-Za-z0-9_]{20,}'
+    'sk_live_[A-Za-z0-9]{16,}'
+    'rk_live_[A-Za-z0-9]{16,}'
+    'api[_-]?key[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']'
+    'client_secret[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']'
+  )
+  CONFIG_DIR="$HOME/.omarchy-tweaks/dotfiles/git"
+  CUSTOM="${CUSTOM_PATTERNS:-$CONFIG_DIR/secret-patterns}"
+  [[ -f "$CUSTOM" ]] && while IFS= read -r pat || [[ -n "$pat" ]]; do [[ -z "$pat" || "$pat" == \#* ]] && continue; SECRET_PATTERNS+=("$pat"); done < "$CUSTOM"
+  for pat in "${SECRET_PATTERNS[@]}"; do
+    git diff --unified=0 "$range" 2>/dev/null | grep -nIE -- "$pat" | while read -r ln; do failf "Possible secret in push diff: $ln"; done || true
+  done
+done
+
+printf '\n' >&2
+if (( FAILED>0 )); then ui fail "Global pre-push blocked ($FAILED). Review before pushing."; exit 1; fi
+if (( WARNINGS>0 )); then ui warn "Pre-push done with $WARNINGS warnings"; else pass "All global pre-push checks passed"; fi
+
+if [[ -x "$LOCAL_HOOK" && ! -L "$LOCAL_HOOK" ]]; then ui info "Running local pre-push hook..."; "$LOCAL_HOOK" "$@"; exit $?; fi
+exit 0

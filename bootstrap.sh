@@ -1382,6 +1382,46 @@ setup_omarchy_overwrites() {
     done
 }
 
+
+# ======================================================= #
+# Dotfiles (Git, global hooks, etc.)
+# ======================================================= #
+
+setup_dotfiles() {
+    section "Dotfiles Setup ${NF_SETTINGS}"
+    local dotfiles_dir="$PROJECT_DIR/dotfiles"
+    [[ -d "$dotfiles_dir" ]] || {
+        msg_warning "Dotfiles directory not found: $dotfiles_dir"
+        return 0
+    }
+
+    # Git config
+    if confirm "Setup global git config (~/.config/git/config)?" false; then
+        local src="$dotfiles_dir/git/config"
+        local dst="$HOME/.config/git/config"
+
+        # Check missing dependencies
+        command_exists delta || msg_warning "Missing: delta (git diff pager)"
+        command_exists gpg || msg_warning "Missing: gpg (for signing commits)"
+        command_exists code || msg_warning "Missing: code (VSCode editor)"
+        command_exists nvim || msg_warning "Missing: nvim (Neovim editor)"
+        command_exists git-lfs || msg_warning "Missing: git-lfs (for large files)"
+
+        [[ -f "$src" ]] || { msg_warning "Missing: $src"; return 0; }
+        ensure_dir "$(dirname -- "$dst")"
+        [[ -e "$dst" || -L "$dst" ]] && backup_path "$dst"
+        if symlink_or_backup "$src" "$dst"; then
+            msg_success "Git config linked"
+        else
+            msg_error "Failed to link git config"
+        fi
+    else
+        msg_warning "Git config setup skipped"
+    fi
+
+    msg_info "Dotfiles setup complete (only items you confirmed were applied)"
+}
+
 # ======================================================= #
 # Menu
 # ======================================================= #
@@ -1420,10 +1460,11 @@ show_menu() {
         "12. Containers: Setup (Atuin/OpenWebUI/Outline/SnapOtter)" \
         "13. Directories: Create (Github/Projects/.ISO/.VM)" \
         "14. Bins: Symlink custom bin/" \
-        "15. Omarchy: Overwrite system scripts" \
-        "16. View bootstrap.log" \
-        "17. Show Version" \
-        "18. Toggle Debug (current: ${DEBUG})" \
+        "15. Dotfiles: Setup (Git/config/hooks)" \
+        "16. Omarchy: Overwrite system scripts" \
+        "17. View bootstrap.log" \
+        "18. Show Version" \
+        "19. Toggle Debug (current: ${DEBUG})" \
         "0. Exit")" || return 1
 
     case "$choice" in
@@ -1445,8 +1486,9 @@ show_menu() {
         *"12. Containers"*) setup_docker_containers; pause ;;
         *"13. Directories"*) create_dirs; pause ;;
         *"14. Bins"*) setup_custom_bin; pause ;;
-        *"15. Omarchy"*) setup_omarchy_overwrites; pause ;;
-        *"16. View"*)
+        *"15. Dotfiles"*) setup_dotfiles; pause ;;
+        *"16. Omarchy"*) setup_omarchy_overwrites; pause ;;
+        *"17. View"*)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -1454,11 +1496,11 @@ show_menu() {
             fi
             pause
             ;;
-        *"17. Show"*)
+        *"18. Show"*)
             printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
             pause
             ;;
-        *"18. Toggle"*)
+        *"19. Toggle"*)
             if (( DEBUG == 0 )); then
                 DEBUG=1
                 trap '__debug_trace' DEBUG

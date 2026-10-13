@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+#################################################################
+# Global post-rewrite hook (chains to local)
+#################################################################
+# Triggered on amend/rebase. Informational only.
+#################################################################
+
+set -uEo pipefail
+export LC_ALL=C
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "Not in git repo" >&2; exit 1; }
+LOCAL_HOOK="$ROOT/.git/hooks/post-rewrite"
+
+if command -v gum >/dev/null 2>&1 && [[ -t 2 ]]; then USE_GUM=1; else USE_GUM=0; fi
+ui() {
+  local k="$1"; shift
+  if (( USE_GUM )); then
+    case "$k" in title) gum style --bold --foreground 212 "$*" ;; warn) gum style --foreground 214 "  [INFO] $*" ;; info) gum style --foreground 39 "  [INFO] $*" ;; *) printf '  %s\n' "$*" >&2 ;; esac
+  else
+    case "$k" in warn|info) printf '  [INFO] %s\n' "$*" >&2 ;; *) printf '%s\n' "$*" >&2 ;; esac
+  fi
+}
+
+ui title "History rewritten (post-rewrite)"
+ui info "Operation: $1 (amend/rebase/etc.)"
+ui info "Rewritten commits may require force push if already pushed"
+ui warn "Verify affected branches before force-pushing"
+
+if [[ -x "$LOCAL_HOOK" && ! -L "$LOCAL_HOOK" ]]; then "$LOCAL_HOOK" "$@"; exit $?; fi
+exit 0

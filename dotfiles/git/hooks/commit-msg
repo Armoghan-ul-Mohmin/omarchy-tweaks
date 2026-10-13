@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+#################################################################
+# Global commit-msg hook (chains to local)
+#################################################################
+# Validates commit message format against Conventional Commits.
+# Also enforces reasonable length and rejects very generic terms.
+# Runs local .git/hooks/commit-msg if present.
+#################################################################
+
+set -uEo pipefail
+export LC_ALL=C
+
+CHAIN_MODE="global-then-local"
+MSG_FILE="$1"
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "Not in git repo" >&2; exit 1; }
+LOCAL_HOOK="$ROOT/.git/hooks/commit-msg"
+
+if [[ "$CHAIN_MODE" == "local-first" && -x "$LOCAL_HOOK" && ! -L "$LOCAL_HOOK" ]]; then
+  "$LOCAL_HOOK" "$@"; exit $?
+fi
+
+if command -v gum >/dev/null 2>&1 && [[ -t 2 ]]; then USE_GUM=1; else USE_GUM=0; fi
+ui() {
+  local k="$1"; shift
+  if (( USE_GUM )); then
+    case "$k" in title) gum style --bold --foreground 212 "$*" ;; ok) gum style --foreground 42 "  [PASS] $*" ;; warn) gum style --foreground 214 "  [WARN] $*" ;; fail) gum style --bold --foreground 196 "  [FAIL] $*" ;; info) gum style --foreground 39 "  [INFO] $*" ;; *) printf '  %s\n' "$*" >&2 ;; esac
+  else
+    case "$k" in ok) printf '  [PASS] %s\n' "$*" >&2 ;; warn) printf '  [WARN] %s\n' "$*" >&2 ;; fail) printf '  [FAIL] %s\n' "$*" >&2 ;; info) printf '  [INFO] %s\n' "$*" >&2 ;; *) printf '%s\n' "$*" >&2 ;; esac
+  fi
+}
+
+[[ -f "$MSG_FILE" ]] || { ui fail "No commit message file"; exit 1; }
+
+# read first non-comment line
+subject="$(grep -vE '^\s*#' "$MSG_FILE" | head -n1 | sed 's/\r$//')"
+[[ -n "${subject//[[:space:]]/}" ]] || { ui fail "Empty commit message subject"; exit 1; }
+
+len=${#subject}
+(( len >= 10 && len <= 72 )) || ui warn "Subject length $len; prefer 10-72 chars"
+
+# conventional commits (types)
+if ! grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?:\s' <<< "$subject"; then
+  ui fail "Subject must follow Conventional Commits: type(scope): description"
+  ui info "Examples: feat(bootstrap): add menu; fix(hooks): handle local hooks; docs(readme): update usage"
+  (( USE_GUM )) && gum style --foreground 39 "Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert" >&2
+  fail=1
+else
+  fail=0
+fi
+
+# reject generic
+generic_re='^(update|updated|changes|change|fix|fixed|wip|tmp|test|tests|misc)$'
+if grep -qiE "$generic_re" <<< "$subject"; then
+  ui fail "Avoid generic/vague subject"
+  fail=1
+fi
+
+(( fail==0 )) && ui ok "Commit message format looks good"
+
+if (( fail!=0 )); then
+  if [[ -x "$LOCAL_HOOK" && ! -L "$LOCAL_HOOK" ]]; then ui info "Running local commit-msg..."; "$LOCAL_HOOK" "$@"; exit $?; fi
+  exit 1
+fi
+
+if [[ -x "$LOCAL_HOOK" && ! -L "$LOCAL_HOOK" ]]; then ui info "Running local commit-msg..."; "$LOCAL_HOOK" "$@"; exit $?; fi
+exit 0

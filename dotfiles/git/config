@@ -1,0 +1,177 @@
+# See https://git-scm.com/docs/git-config
+
+# ===============================
+# USER & IDENTITY & GPG Path
+# ===============================
+[user]
+    name = '<Your Name>'
+    email = '<Your Email>'
+    signingkey = '<Your GPG Key>'
+
+[gpg]
+    program = /usr/bin/gpg
+
+# ===============================
+# INITIALIZATION & THEMING
+# ===============================
+[init]
+    defaultBranch = main
+
+[include]
+	path = $HOME/.omarchy-tweaks/dotfiles/git/catppuccin.gitconfig
+
+# ===============================
+# DIFF & DELTA CONFIGURATION
+# ===============================
+[interactive]
+    diffFilter = delta --color-only
+
+[delta]
+    features = catppuccin-macchiato
+    syntax-theme = catppuccin-mocha
+	algorithms = histogram
+    navigate = true
+    side-by-side = false
+    line-numbers = true
+    dark = true
+
+# ===============================
+# MERGE & DIFF SETTINGS
+# ===============================
+[merge]
+    conflictstyle = diff3
+    tool = vscode
+
+[mergetool "vscode"]
+    cmd = code --wait --merge "$REMOTE" "$LOCAL" "$BASE" "$MERGED"
+    keepBackup = false
+    trustExitCode = true
+
+[diff]
+    colorMoved = default
+    tool = delta
+    mnemonicprefix = true
+
+# ===============================
+# CORE & FILE SETTINGS
+# ===============================
+[core]
+    editor = nvim
+    pager = delta
+    autocrlf = input
+    whitespace = trailing-space,space-before-tab
+    longpaths = true
+    filemode = false
+    excludesFile = $HOME/.omarchy-tweaks/dotfiles/git/ignore
+    hooksPath = $HOME/.omarchy-tweaks/dotfiles/git/hooks
+
+# ===============================
+# GIT LFS (Large File Storage)
+# ===============================
+[filter "lfs"]
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    process = git-lfs filter-process
+    required = true
+
+# ===============================
+# COLOR & UI SETTINGS
+# ===============================
+[color]
+    ui = auto
+    branch = auto
+    diff = auto
+    status = auto
+
+# ===============================
+# BRANCH, PULL, PUSH, REBASE
+# ===============================
+[pull]
+    rebase = true
+
+[push]
+    default = simple
+	autoSetupRemote = true
+    followTags = false
+
+[rebase]
+    autoStash = true
+
+# ===============================
+# LOG & FORMAT
+# ===============================
+[log]
+    date = iso
+    decorate = short
+
+[format]
+    pretty = format:%C(bold cyan)⎇ %h%C(reset) %C(green)[%ar]%C(reset)%n%C(bold white)  %s%C(reset)%n  %C(dim)┌─ Author:    %C(bold blue)%an%C(reset)%n  %C(cyan)├─ Date:      %ad%C(reset)%n  %C(yellow)├─ Committer: %cn <%ce>%C(reset)%n  %C(magenta)├─ Tree:      %t%C(reset)%n  %C(blue)├─ Parent:    %p%C(reset)%n  %C(yellow)├─ GPG:       %C(bold green)%GS%C(reset)%n  %C(cyan)├─ Key:       %GK%C(reset)%n  %C(magenta)└─ Refs:      %C(auto)%d%C(reset)%n
+
+# ===============================
+# DIFF TOOL INTEGRATION
+# ===============================
+[diff "tool"]
+    prompt = false
+
+[difftool]
+    prompt = false
+
+[difftool "delta"]
+    cmd = delta --color-only
+
+# ===============================
+# PAGER SETTINGS
+# ===============================
+[pager]
+    log = delta
+    diff = delta
+    reflog = delta
+    show = delta
+
+# ===============================
+# STATUS SETTINGS
+# ===============================
+[status]
+    showUntrackedFiles = all
+    short = false
+
+# ===============================
+# FETCH & PRUNE
+# ===============================
+[fetch]
+    prune = true
+
+# ===============================
+# TAG MANAGEMENT
+# ===============================
+[tag]
+    sort = version:refname
+
+# ===============================
+# RERERE (Reuse recorded resolution)
+# ===============================
+[rerere]
+    enabled = true
+	autoupdate = true
+
+
+# ===============================
+# COMMIT TEMPLATE & SIGNING
+# ===============================
+[commit]
+    verbose = true
+    gpgSign = true
+    autoEdit = false
+
+# ===============================
+# HTTP & GREP & Shortcut
+# ===============================
+[http]
+    sslVerify = true
+
+[grep]
+    lineNumber = true
+    patternType = extended
+
+[url "https://github.com/"]
+    insteadOf = github:
