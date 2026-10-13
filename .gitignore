@@ -1,3 +1,26 @@
+# Env files
+.env
+.env.*
+*.env
+!*/sample.env
+!sample.env
+
+# Logs
+*.log
+logs/*
+!logs/.gitkeep
+
+# Backups/temp
+*.bak
+*.tmp
+*.swp
+*.swo
+.DS_Store
+
+# Local state
+.local/
+.state/
+
+# Remember file
 .remember
-logs
 .claude
