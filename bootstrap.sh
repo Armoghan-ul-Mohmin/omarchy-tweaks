@@ -1,22 +1,26 @@
-#! /usr/bin/env bash
+#!/usr/bin/env bash
 
 # ======================================================= #
 #          Bootstrap Script for Project Setup             #
 # ======================================================= #
 #   Author:  Armoghan-ul-Mohmin                           #
-#   Version: 1.0.0                                        #
-#   Date:    2026-10-09                                   #
+#   Version: 1.0.1                                        #
+#   Date:    2026-10-13                                   #
 # ======================================================= #
 #                                                         #
 #   Usage:                                                #
-#     chmod +x ~/.omarchy-tweaks/bootstrap.sh             #
-#     ~/.omarchy-tweaks/bootstrap.sh                      #
-#     ~/.omarchy-tweaks/bootstrap.sh --help               #
-#     ~/.omarchy-tweaks/bootstrap.sh --version            #
+#     chmod +x bootstrap.sh                               #
+#     ./bootstrap.sh                                      #
+#     ./bootstrap.sh --menu                               #
+#     ./bootstrap.sh --help                               #
+#     ./bootstrap.sh --version                            #
+#     BOOTSTRAP_PROJECT_DIR=/path ./bootstrap.sh           #
 #                                                         #
 # ======================================================= #
 
 set -Eeuo pipefail
+IFS=$'\n\t'
+
 trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
 trap on_interrupt INT
 
@@ -28,22 +32,23 @@ trap on_interrupt INT
 AUTHOR="Armoghan-ul-Mohmin"
 VERSION="1.0.0"
 URL="https://github.com/Armoghan-ul-Mohmin/omarchy-tweaks.git"
-OMARCHY_VERSION=$(omarchy-version)
-readonly LOG_DATE_FORMAT="+%Y-%m-%d %H:%M:%S"
-readonly SCRIPT_NAME="bootstrap.sh"
+SCRIPT_NAME="bootstrap.sh"
+LOG_DATE_FORMAT="+%Y-%m-%d %H:%M:%S"
+
+# Debug
 DEBUG=0
 
-# Path
-readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# readonly PROJECT_DIR="$HOME/.omarchy-tweaks"
-readonly PROJECT_DIR="/home/armoghan/Documents/Github/Armoghan-ul-Mohmin/omarchy-tweaks"  # Just for developement
-readonly CONFIG_DIR="$HOME/.config"
-readonly LOG_DIR="$PROJECT_DIR/logs"
-readonly HOME_DIR="$HOME"
+# Paths
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${BOOTSTRAP_PROJECT_DIR:-$SCRIPT_DIR}"
+CONFIG_DIR="$HOME/.config"
+LOG_DIR="$PROJECT_DIR/logs"
+HOME_DIR="$HOME"
+OMARCHY_BIN="${OMARCHY_BIN:-/usr/share/omarchy/bin}"
 
 # Files
-readonly LOG_FILE="$LOG_DIR/bootstrap.log"
-readonly BANNER_FILE="$PROJECT_DIR/banner.txt"
+LOG_FILE="$LOG_DIR/bootstrap.log"
+BANNER_FILE="$PROJECT_DIR/banner.txt"
 
 # Log levels
 readonly LOG_LEVEL_INFO="INFO"
@@ -52,15 +57,37 @@ readonly LOG_LEVEL_WARNING="WARN"
 readonly LOG_LEVEL_ERROR="ERROR"
 readonly LOG_LEVEL_DEBUG="DEBUG"
 
-# Icons
-readonly NF_CHECK=""
-readonly NF_CROSS=""
-readonly NF_WARNING=""
-readonly NF_INFO=""
-readonly NF_DEBUG=""
-readonly NF_ARROW=""
-readonly NF_ROCKET="󰓅"
-readonly NF_GEAR=""
+# Nerd Font Icons
+NF_CHECK=""
+NF_CROSS=""
+NF_WARNING=""
+NF_INFO=""
+NF_DEBUG=""
+NF_ARROW=""
+NF_ROCKET="󰓅"
+NF_GEAR=""
+NF_FOLDER=""
+NF_PACKAGE="󰏖"
+NF_CLOUD="󰅟"
+NF_SERVER="󰒋"
+NF_SETTINGS="󰒓"
+NF_LINK=""
+NF_SPARKLE="✨"
+NF_TERMINAL=""
+NF_DESKTOP="󰟀"
+NF_CPU=""
+NF_HOURGLASS="󰔟"
+NF_SEARCH=""
+NF_LIST=""
+NF_STAR=""
+NF_FIRE="󰈸"
+NF_CODE="󰅩"
+NF_BOX="󰆧"
+NF_BOLT=""
+NF_LAUNCH="󰐃"
+NF_SHIELD="󰒡"
+NF_DATABASE="󰆼"
+NF_KEY=""
 
 # Package List (bloatware)
 readonly PACKAGES_TO_REMOVE=(
@@ -81,15 +108,15 @@ readonly PACKAGES_TO_REMOVE=(
 
 # Mise Packages
 readonly MISE=(
-    ~/.local/bin/gemini
-    ~/.local/bin/pi
-    ~/.local/bin/omp
-    ~/.local/bin/grok
-    ~/.local/bin/crush
-    ~/.local/bin/ghui
-    ~/.local/bin/hunk
-    ~/.local/bin/cursor-agent
-    ~/.local/bin/hermes
+    "$HOME/.local/bin/gemini"
+    "$HOME/.local/bin/pi"
+    "$HOME/.local/bin/omp"
+    "$HOME/.local/bin/grok"
+    "$HOME/.local/bin/crush"
+    "$HOME/.local/bin/ghui"
+    "$HOME/.local/bin/hunk"
+    "$HOME/.local/bin/cursor-agent"
+    "$HOME/.local/bin/hermes"
 )
 
 # Pacman Packages
@@ -164,24 +191,24 @@ readonly OMARCHY_PLUGINS=(
     "OmaSettings|https://github.com/twiking/omasettings.git|One window for every Omarchy setting"
     "Omarchy Switcher|https://github.com/lsongdev/omarchy-switcher.git|Fast Super+Tab window switching"
     "Radial menu|https://github.com/signaldirective/radial-menu.git|A theme-aware radial (pie) version of the Omarchy menu"
-    "Spotlight|https://github.com/maajix/omarchy-spotlight.git|A Raycast-style launcher for Omarchy."
+    "Spotlight|https://github.com/maajix/omarchy-spotlight.git|A Raycast-style launcher for Omarchy"
     "Tray|https://github.com/TyRichards/omarchy-tray.git|A better system tray"
     "Yet Another Notification Center|https://github.com/Loafer19/omarchy-yet-another-notification-center.git|Notification history"
 )
 
 # Ollama Models
 readonly OLLAMA_MODELS=(
-    "qwen3:1.7b"                        # Size: 1.7GB
-    "qwen2.5-coder:1.5b"                # Size: 986MB
-    "qwen2.5-coder:0.5b"                # Size: 398MB
-    "qwen:0.5b"                         # Size: 395MB
-    "tinyllama:latest"                  # Size: 638MB
-    "tinyllama:1.1b"                    # Size: 638MB
-    "dolphin-phi:2.7b-v2.6-q3_K_S"      # Size: 1.3GB  (Unfiltered)
+    "qwen3:1.7b"
+    "qwen2.5-coder:1.5b"
+    "qwen2.5-coder:0.5b"
+    "qwen:0.5b"
+    "tinyllama:latest"
+    "tinyllama:1.1b"
+    "dolphin-phi:2.7b-v2.6-q3_K_S"
 )
 
 # ======================================================= #
-# Error Handling
+# Error Handling & Utils
 # ======================================================= #
 
 on_error() {
@@ -201,37 +228,130 @@ on_error() {
 }
 
 on_interrupt() {
-    msg_error "Setup interrupted by user."
+    printf '\n'
+    msg_warning "Operation interrupted by user."
     exit 130
 }
 
-# Debug command tracer (replaces noisier `set -x`).
 __debug_trace() {
     local cmd="${BASH_COMMAND%% *}"
     case "$cmd" in
-        msg_*)
-            # msg_* functions already print their own formatted output.
+        msg_*|log|section|pause|confirm|require_cmd|ensure_dir|is_root|has_sudo)
             return
             ;;
-        main | parse_arguments | init_logger | check_dependencies | banner)
+        main|main_menu|show_menu|parse_arguments|init_logger|check_dependencies|banner|get_omarchy_version)
             printf '+ %s\n' "$BASH_COMMAND" >&2
             ;;
     esac
 }
 
+# Runtime helpers
+is_root() {
+    [[ "${EUID:-$(id -u)}" -eq 0 ]]
+}
+
+has_sudo() {
+    command -v sudo >/dev/null 2>&1 && sudo -v >/dev/null 2>&1
+}
+
+sudo_cmd_array() {
+    if is_root; then
+        printf '%s\n' ""
+        return 0
+    fi
+    if has_sudo; then
+        printf 'sudo\n'
+        return 0
+    fi
+    return 1
+}
+
+slugify() {
+    local input="$*"
+    printf '%s' "$input" |
+        tr '[:upper:]' '[:lower:]' |
+        sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//'
+}
+
+get_omarchy_version() {
+    if command -v omarchy-version >/dev/null 2>&1; then
+        omarchy-version 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
+}
+
+require_cmd() {
+    local cmd="$1"
+    local desc="${2:-$cmd}"
+    if command -v "$cmd" >/dev/null 2>&1; then
+        msg_debug "Command found: $cmd"
+        return 0
+    fi
+    msg_error "Required command not found: ${desc}"
+    return 1
+}
+
+ensure_dir() {
+    local dir="$1"
+    [[ -n "$dir" ]] || return 1
+    if [[ -d "$dir" ]]; then
+        msg_debug "Directory exists: $dir"
+        return 0
+    fi
+    if mkdir -p -- "$dir"; then
+        msg_debug "Created directory: $dir"
+        return 0
+    fi
+    msg_error "Cannot create directory: $dir"
+    return 1
+}
+
+backup_path() {
+    local src="$1"
+    [[ -e "$src" || -L "$src" ]] || return 0
+    local ts
+    ts="$(date +%Y%m%d_%H%M%S 2>/dev/null || printf '%s' "$(date +%s)")"
+    local dst="${src}.${ts}.bak"
+    if /usr/bin/mv -- "$src" "$dst" 2>/dev/null; then
+        msg_debug "Backed up: $src -> $dst"
+        return 0
+    fi
+    msg_error "Failed to backup: $src"
+    return 1
+}
+
+symlink_or_backup() {
+    local src="$1"
+    local dst="$2"
+    [[ -n "$src" && -n "$dst" ]] || return 1
+    [[ -e "$src" || -L "$src" ]] || { msg_error "Source not found: $src"; return 1; }
+
+    ensure_dir "$(dirname -- "$dst")" || return 1
+
+    if [[ -e "$dst" || -L "$dst" ]]; then
+        backup_path "$dst" || return 1
+    fi
+
+    if ln -sf -- "$src" "$dst"; then
+        msg_success "Symlinked: $dst -> $src"
+        return 0
+    fi
+    msg_error "Failed to symlink: $dst -> $src"
+    return 1
+}
+
 # ======================================================= #
-# Logger
+# Logger & Messages
 # ======================================================= #
 
-# Write a message to the log file only.
-# Terminal output is handled by the msg_* helpers, so nothing is printed twice.
 log() {
     local level="$1"
     shift
     local message="$*"
     local timestamp log_line
 
-    timestamp=$(date "$LOG_DATE_FORMAT") || timestamp="unknown-time"
+    timestamp="$(date "$LOG_DATE_FORMAT" 2>/dev/null || echo "unknown-time")"
     log_line="[$timestamp] [$level] $message"
 
     printf '%s\n' "$log_line" >> "$LOG_FILE" 2>/dev/null || {
@@ -239,23 +359,112 @@ log() {
     }
 }
 
-# Initialize Logger
 init_logger() {
-    if ! mkdir -p -- "$LOG_DIR"; then
-        printf 'ERROR: Cannot create log directory: %s\n' "$LOG_DIR" >&2
-        return 1
-    fi
-
-    if ! touch -- "$LOG_FILE"; then
+    ensure_dir "$LOG_DIR" || return 1
+    if ! touch -- "$LOG_FILE" 2>/dev/null; then
         printf 'ERROR: Cannot create log file: %s\n' "$LOG_FILE" >&2
         return 1
     fi
-
     log "$LOG_LEVEL_DEBUG" "Logger initialized: $LOG_FILE"
 }
 
+msg_success() {
+    gum style \
+        --foreground 2 \
+        --bold \
+        "${NF_CHECK}  ${*}"
+    log SUCCESS "$*"
+}
+
+msg_error() {
+    gum style \
+        --foreground 1 \
+        --bold \
+        "${NF_CROSS}  ${*}" >&2
+    log ERROR "$*"
+}
+
+msg_warning() {
+    gum style \
+        --foreground 3 \
+        --bold \
+        "${NF_WARNING}  ${*}" >&2
+    log WARN "$*"
+}
+
+msg_info() {
+    gum style \
+        --foreground 4 \
+        "${NF_INFO}  ${*}"
+    log INFO "$*"
+}
+
+msg_debug() {
+    [[ "${DEBUG:-0}" == "1" ]] || return 0
+    gum style \
+        --foreground 8 \
+        "${NF_DEBUG}  ${*}" >&2
+    log DEBUG "$*"
+}
+
+section() {
+    local title="$*"
+    printf '\n'
+    gum style \
+        --foreground "#89b4fa" \
+        --bold \
+        --border rounded \
+        --border-foreground "#89b4fa" \
+        --padding "0 2" \
+        "${NF_GEAR}  ${title}"
+    printf '\n'
+}
+
+confirm() {
+    local msg="$1"
+    local default="${2:-true}"
+    gum confirm \
+        "$msg" \
+        --default="$default" \
+        --affirmative="Yes" \
+        --negative="No"
+}
+
+pause() {
+    local msg="${1:-Continue to next step?}"
+    printf '\n'
+    gum confirm \
+        "${NF_HOURGLASS}  ${msg}" \
+        --default=true \
+        --affirmative="Continue" \
+        --negative="Exit"
+}
+
+select_multiple() {
+    local header="$1"
+    shift
+    local -a items=("$@")
+    (( ${#items[@]} > 0 )) || return 1
+    gum choose \
+        --no-limit \
+        --cursor="${NF_ARROW} " \
+        --selected-prefix="${NF_CHECK} " \
+        --unselected-prefix="  " \
+        --header "$header" \
+        "${items[@]}"
+}
+
+run_spinner() {
+    local title="$1"
+    shift
+    gum spin \
+        --spinner dot \
+        --title "$title" \
+        -- "$@"
+}
+
 # ======================================================= #
-# Argument Parsing/ Help Menu
+# Argument Parsing & Help
 # ======================================================= #
 
 parse_arguments() {
@@ -274,6 +483,9 @@ parse_arguments() {
                 trap '__debug_trace' DEBUG
                 set +x
                 ;;
+            -m|--menu)
+                export BOOTSTRAP_SHOW_MENU=1
+                ;;
             *)
                 printf 'Unknown option: %s\n' "$1" >&2
                 show_help
@@ -289,65 +501,23 @@ show_help() {
 Usage: $(basename "$0") [OPTIONS]
 
 Options:
-  -h, --help       Show help
-  -v, --version    Show version
+  -h, --help       Show this help message
+  -v, --version    Show script version
   -d, --debug      Enable debug output
+  -m, --menu       Launch interactive menu
+
+Environment:
+  BOOTSTRAP_PROJECT_DIR  Override project directory (default: script dir)
+  OMARCHY_BIN            Override Omarchy bin dir (default: /usr/share/omarchy/bin)
 EOF
 }
 
 # ======================================================= #
-#  Helper Functions
+# Core Functions
 # ======================================================= #
 
-# Success Message
-msg_success() {
-    gum style \
-        --foreground 2 \
-        --bold \
-        "${NF_CHECK} SUCCESS: $*"
-    log SUCCESS "$*"
-}
-
-# Error Message
-msg_error() {
-    gum style \
-        --foreground 1 \
-        --bold \
-        "${NF_CROSS} ERROR: $*" >&2
-    log ERROR "$*"
-}
-
-# Warning Message
-msg_warning() {
-    gum style \
-        --foreground 3 \
-        --bold \
-        "${NF_WARNING} WARNING: $*" >&2
-    log WARN "$*"
-}
-
-# Info Message
-msg_info() {
-    gum style \
-        --foreground 4 \
-        "${NF_INFO} INFO: $*"
-    log INFO "$*"
-}
-
-# Debug Message
-msg_debug() {
-    [[ "${DEBUG:-0}" == "1" ]] || return 0
-
-    gum style \
-        --foreground 8 \
-        "${NF_DEBUG} DEBUG: $*" >&2
-    log DEBUG "$*"
-}
-
-# Check if command exists
 command_exists() {
     local cmd="$1"
-
     if command -v "$cmd" >/dev/null 2>&1; then
         msg_debug "Command found: $cmd"
         return 0
@@ -356,51 +526,22 @@ command_exists() {
     return 1
 }
 
-# Check Dependencies
 check_dependencies() {
-    local cmd
-    # gum is required for formatted messages.
-    if ! command -v gum >/dev/null 2>&1; then
-        printf 'ERROR: Required command not found: gum\n' >&2
-        exit 1
-    fi
-
-    for cmd in git omarchy-version snapper; do
-        if ! command_exists "$cmd"; then
-            return 1
-        fi
-    done
-    msg_success "All required dependencies are installed"
+    require_cmd gum "gum (required for UI)" || exit 1
+    require_cmd git "git" || return 1
+    require_cmd snapper "snapper" || return 1
+    msg_success "Core dependencies verified"
 }
 
-# Confirm to make directories if they don't exist
-confirm_create_dir() {
-    local dir="$1"
-    if [[ ! -d "$dir" ]]; then
-        gum confirm \
-            "Directory '$dir' does not exist. Do you want to create it?" \
-            --default=true \
-            --affirmative="Yes" \
-            --negative="No" || {
-                msg_error "Directory creation skipped."
-                return 1
-            }
-    fi
-}
-
-# ======================================================= #
-# Functions
-# ======================================================= #
-
-# Display project banner if available
 banner() {
     clear
     printf '\n\n'
 
     local title="OMARCHY TWEAKS"
-    local subtitle="Bootstrap & Configuration Setup"
+    local subtitle="Bootstrap • Config • Automation"
+    local omv
+    omv="$(get_omarchy_version)"
 
-    # Main banner
     if [[ -f "$BANNER_FILE" ]]; then
         gum style \
             --border double \
@@ -420,1142 +561,1007 @@ banner() {
             --align center \
             --width 130 \
             --padding "1 3" \
-            "$NF_ROCKET  $title
-            $subtitle"
+            "${NF_ROCKET}  ${title}
+            ${subtitle}"
     fi
 
     printf '\n'
 
-    # Project metadata
-    gum style \
-        --foreground 5 \
-        --align center \
-        --width 130 \
-        --padding "1 1" \
-        "${NF_GEAR}  Author: ${AUTHOR}     ${NF_CHECK}  Version: ${VERSION}"
-
-    # Git URL on the next line
     gum style \
         --foreground 5 \
         --align center \
         --width 130 \
         --padding "0 1" \
-        "${NF_ARROW}  Git: ${URL}"
+        "${NF_CODE}  Author: ${AUTHOR}     ${NF_CHECK}  Version: ${VERSION}"
+
+    gum style \
+        --foreground 5 \
+        --align center \
+        --width 130 \
+        --padding "0 1" \
+        "${NF_LINK}  Git: ${URL}"
 
     printf '\n'
 
-    # Environment information
     gum style \
         --border rounded \
         --border-foreground 8 \
         --foreground 8 \
         --align center \
-        --width 130\
+        --width 130 \
         --padding "0 1" \
-        "Omarchy Version: ${OMARCHY_VERSION}"
+        "${NF_CPU}  Omarchy: ${omv}     ${NF_FOLDER}  Project: ${PROJECT_DIR}"
 
     printf '\n'
 }
 
-# Create Snapshot of the Current System State
+# ======================================================= #
+# Snapshot
+# ======================================================= #
+
 snapshot() {
-    local NAME=""
-    local DESCRIPTION=""
-    local SNAPSHOT_ID
-    local SNAPSHOT_DESCRIPTION
-
-    SNAPSHOT_ID="$(date +%Y-%m-%d_%H:%M:%S)"
-
+    section "System Snapshot ${NF_SHIELD}"
+    msg_info "Create a Btrfs/Snapper snapshot before changes"
     printf '\n'
-    msg_info "Creating a snapshot of the current system state..."
 
-    gum confirm \
-        "Do you want to create a snapshot before proceeding?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "Snapshot creation skipped."
-            return 0
-        }
+    confirm "Create a system snapshot now?" true || {
+        msg_warning "Snapshot skipped"
+        return 0
+    }
 
-    if gum confirm \
-        "Do you want to provide a custom name for the snapshot?" \
-        --default=false \
-        --affirmative="Yes" \
-        --negative="No"; then
-        NAME="$(gum input --placeholder "Enter snapshot name (optional)")"
+    local name=""
+    local desc=""
+    local snap_id
+    snap_id="$(date +%Y-%m-%d_%H:%M:%S)"
+
+    if confirm "Add a custom snapshot name?" false; then
+        name="$(gum input --placeholder "Snapshot name (optional)")" || name=""
     fi
 
-    if gum confirm \
-        "Do you want to provide a description for the snapshot?" \
-        --default=false \
-        --affirmative="Yes" \
-        --negative="No"; then
-        DESCRIPTION="$(gum input --placeholder "Enter snapshot description (optional)")"
+    if confirm "Add a snapshot description?" false; then
+        desc="$(gum input --placeholder "Description (optional)")" || desc=""
     fi
 
-    # Build snapshot description from supplied values.
-    SNAPSHOT_DESCRIPTION="$SNAPSHOT_ID"
-
-    if [[ -n "$NAME" && -n "$DESCRIPTION" ]]; then
-        SNAPSHOT_DESCRIPTION="$SNAPSHOT_ID - $NAME: $DESCRIPTION"
-    elif [[ -n "$NAME" ]]; then
-        SNAPSHOT_DESCRIPTION="$SNAPSHOT_ID - $NAME"
-    elif [[ -n "$DESCRIPTION" ]]; then
-        SNAPSHOT_DESCRIPTION="$SNAPSHOT_ID - $DESCRIPTION"
-    elif [[ -z "$NAME" && -z "$DESCRIPTION" ]]; then
-        SNAPSHOT_DESCRIPTION="$SNAPSHOT_ID"
+    local snap_desc="$snap_id"
+    if [[ -n "$name" && -n "$desc" ]]; then
+        snap_desc="$snap_id - $name: $desc"
+    elif [[ -n "$name" ]]; then
+        snap_desc="$snap_id - $name"
+    elif [[ -n "$desc" ]]; then
+        snap_desc="$snap_id - $desc"
     fi
 
-    if snapper create --description "$SNAPSHOT_DESCRIPTION"; then
-        msg_success "Snapshot created successfully: $SNAPSHOT_DESCRIPTION"
+    if run_spinner "${NF_DATABASE}  Creating snapshot..." snapper create --description "$snap_desc"; then
+        msg_success "Snapshot created: $snap_desc"
+        return 0
     else
-        msg_error "Failed to create snapshot."
+        msg_error "Failed to create snapshot"
         return 1
     fi
 }
 
-# Remove Packages (bloatware)
-remove_packages() {
-    printf '\n'
-    msg_info "Remove Preinstalled Bloatware Packages"
-    printf '\n'
-    gum confirm \
-        "Do you want to remove preinstalled bloatware packages?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "Package removal skipped."
-            return 0
-        }
+# ======================================================= #
+# Cleanup
+# ======================================================= #
 
-    local -a remove_cmd=(pacman -Rns --noconfirm)
-    if [[ "$EUID" -ne 0 ]]; then
-        if ! command -v sudo >/dev/null 2>&1 || ! sudo -v; then
-            msg_error "Root privileges are required to remove packages."
-            return 1
-        fi
-        remove_cmd=(sudo "${remove_cmd[@]}")
+remove_packages() {
+    section "Remove Bloatware Packages ${NF_PACKAGE}"
+    confirm "Remove preinstalled bloatware packages?" true || {
+        msg_warning "Package removal skipped"
+        return 0
+    }
+
+    local -a remove_cmd=()
+    if is_root; then
+        remove_cmd=(pacman -Rns --noconfirm)
+    elif has_sudo; then
+        remove_cmd=(sudo pacman -Rns --noconfirm)
+    else
+        msg_error "Root/sudo required to remove packages"
+        return 1
     fi
 
-    # Filter the list down to packages that are actually installed.
     local -a installed=()
-    local package
-    for package in "${PACKAGES_TO_REMOVE[@]}"; do
-        if pacman -Qq "$package" >/dev/null 2>&1; then
-            installed+=("$package")
+    local pkg
+    for pkg in "${PACKAGES_TO_REMOVE[@]}"; do
+        if pacman -Qq "$pkg" >/dev/null 2>&1; then
+            installed+=("$pkg")
         fi
     done
 
-    if (( ${#installed[@]} == 0 )); then
-        msg_warning "No bloatware packages found to remove."
+    (( ${#installed[@]} > 0 )) || {
+        msg_warning "No bloatware packages found"
         return 0
-    fi
+    }
 
-    local selected_packages
-    selected_packages="$(gum choose \
-        --no-limit \
-        --cursor="${NF_ARROW} " \
-        --selected-prefix="${NF_CHECK} " \
-        --unselected-prefix="  " \
-        --header "Select packages to remove (use space to select, enter to confirm)" \
-        "${installed[@]}")" || {
-            msg_warning "Package removal skipped."
-            return 0
-        }
+    local selected
+    selected="$(select_multiple "${NF_GEAR}  Select packages to remove (space=select, enter=confirm)" "${installed[@]}")" || {
+        msg_warning "Selection cancelled"
+        return 0
+    }
 
     local -a to_remove=()
-    while read -r package; do
-        [[ -n "$package" ]] || continue
-        to_remove+=("$package")
-    done <<< "$selected_packages"
+    while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] || continue
+        to_remove+=("$pkg")
+    done <<< "$selected"
 
-    if (( ${#to_remove[@]} == 0 )); then
-        msg_warning "No packages selected."
+    (( ${#to_remove[@]} > 0 )) || {
+        msg_warning "No packages selected"
         return 0
-    fi
+    }
 
-    # Remove everything in a single pacman transaction.
     local output
     if output="$("${remove_cmd[@]}" "${to_remove[@]}" 2>&1)"; then
-        msg_success "Removed packages: ${to_remove[*]}"
+        msg_success "Removed: ${to_remove[*]}"
+        return 0
     else
-        msg_error "Failed to remove packages: ${to_remove[*]}"
+        msg_error "Failed to remove packages"
         printf '%s\n' "$output" >&2
         return 1
     fi
 }
 
-# Remove TUI packages (preinstalled)
 remove_tui() {
-    local APP_DIR="${1:-$HOME/.local/share/applications}"
-    local ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
-    local OLD_ICON_DIR="$HOME/.local/share/applications/icons"
+    local app_dir="${1:-$HOME/.local/share/applications}"
+    local icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    local old_icon_dir="$HOME/.local/share/applications/icons"
 
-    printf '\n'
-    msg_info "Remove Preinstalled TUI Applications"
-    printf '\n'
+    section "Remove Preinstalled TUIs ${NF_TERMINAL}"
+    confirm "Remove preinstalled TUI .desktop entries?" true || {
+        msg_warning "TUI removal skipped"
+        return 0
+    }
 
-    gum confirm \
-        "Do you want to remove preinstalled TUI applications?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "TUI removal skipped."
-            return 0
-        }
-
-    # Find installed TUI desktop entries.
-    local -a tui_desktop_files=()
-    local -a tui_names=()
-    local -a choices=()
-    local file app_name icon_name
-
+    local -a tui_files=() tui_names=() choices=()
+    local file app_name
     while IFS= read -r -d '' file; do
         if grep -qF 'Exec=xdg-terminal-exec --app-id=TUI.' "$file" 2>/dev/null; then
             app_name="$(basename "$file" .desktop)"
-            tui_desktop_files+=("$file")
+            tui_files+=("$file")
             tui_names+=("$app_name")
             choices+=("$app_name")
         fi
-    done < <(find "$APP_DIR" -maxdepth 1 -type f -name '*.desktop' -print0 2>/dev/null)
+    done < <(find "$app_dir" -maxdepth 1 -type f -name '*.desktop' -print0 2>/dev/null)
 
-    if (( ${#choices[@]} == 0 )); then
-        msg_warning "No TUIs found."
+    (( ${#choices[@]} > 0 )) || {
+        msg_warning "No TUIs found"
         return 0
-    fi
+    }
 
-    # Select TUIs using the same styled multi-select menu.
-    local selected_tuis
-    selected_tuis="$(gum choose \
-        --no-limit \
-        --cursor="${NF_ARROW} " \
-        --selected-prefix="${NF_CHECK} " \
-        --unselected-prefix="  " \
-        --header "${NF_GEAR}  Select TUIs to remove (space to select, enter to confirm)" \
-        "${choices[@]}")" || {
-            msg_warning "TUI removal skipped."
-            return 0
-        }
+    local selected
+    selected="$(select_multiple "${NF_GEAR}  Select TUIs to remove" "${choices[@]}")" || {
+        msg_warning "Selection cancelled"
+        return 0
+    }
 
     local -a to_remove=()
     while IFS= read -r app_name; do
         [[ -n "$app_name" ]] || continue
         to_remove+=("$app_name")
-    done <<< "$selected_tuis"
+    done <<< "$selected"
 
-    if (( ${#to_remove[@]} == 0 )); then
-        msg_warning "No TUIs selected."
+    (( ${#to_remove[@]} > 0 )) || {
+        msg_warning "No TUIs selected"
         return 0
-    fi
+    }
 
-    # Remove selected desktop files and their icons.
-    local i output
+    local i icon_name output
     for app_name in "${to_remove[@]}"; do
         for i in "${!tui_names[@]}"; do
             [[ "${tui_names[$i]}" == "$app_name" ]] || continue
-
-            icon_name="$(printf '%s\n' "$app_name" |
-                tr '[:upper:]' '[:lower:]' |
-                sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//')"
-
-            if output="$(rm -f -- \
-                "${tui_desktop_files[$i]}" \
-                "$ICON_DIR/$icon_name.png" \
-                "$OLD_ICON_DIR/$icon_name.png" 2>&1)"; then
-                msg_success "Removed TUI: $app_name"
-            else
-                msg_error "Failed to remove TUI: $app_name"
-                printf '%s\n' "$output" >&2
-            fi
+            icon_name="$(slugify "$app_name")"
+            output="$(rm -f -- \
+                "${tui_files[$i]}" \
+                "$icon_dir/${icon_name}.png" \
+                "$old_icon_dir/${icon_name}.png" 2>&1)" || true
+            msg_success "Removed TUI: $app_name"
             break
         done
     done
 }
 
-# Remove WebApps (preinstalled)
 remove_webapps() {
-    local APP_DIR="${1:-$HOME/.local/share/applications}"
-    local ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
-    local OLD_ICON_DIR="$HOME/.local/share/applications/icons"
+    local app_dir="${1:-$HOME/.local/share/applications}"
+    local icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    local old_icon_dir="$HOME/.local/share/applications/icons"
 
-    printf '\n'
-    msg_info "Remove Preinstalled Web Applications"
-    printf '\n'
+    section "Remove Preinstalled WebApps ${NF_CLOUD}"
+    confirm "Remove preinstalled WebApp .desktop entries?" true || {
+        msg_warning "WebApp removal skipped"
+        return 0
+    }
 
-    gum confirm \
-        "Do you want to remove preinstalled web applications?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "WebApp removal skipped."
-            return 0
-        }
-
-    # Find installed WebApp desktop entries.
-    local -a webapp_desktop_files=()
-    local -a webapp_names=()
-    local -a choices=()
+    local -a web_files=() web_names=() choices=()
     local file app_name
-
     while IFS= read -r -d '' file; do
         if grep -Eq 'Exec=(omarchy-launch-webapp|omarchy-webapp-handler)' "$file" 2>/dev/null; then
             app_name="$(basename "$file" .desktop)"
-            webapp_desktop_files+=("$file")
-            webapp_names+=("$app_name")
+            web_files+=("$file")
+            web_names+=("$app_name")
             choices+=("$app_name")
         fi
-    done < <(find "$APP_DIR" -maxdepth 1 -type f -name '*.desktop' -print0 2>/dev/null)
+    done < <(find "$app_dir" -maxdepth 1 -type f -name '*.desktop' -print0 2>/dev/null)
 
-    if (( ${#choices[@]} == 0 )); then
-        msg_warning "No web apps found."
+    (( ${#choices[@]} > 0 )) || {
+        msg_warning "No web apps found"
         return 0
-    fi
+    }
 
-    # Select WebApps using a styled multi-select menu.
-    local selected_webapps
-    selected_webapps="$(gum choose \
-        --no-limit \
-        --cursor="${NF_ARROW} " \
-        --selected-prefix="${NF_CHECK} " \
-        --unselected-prefix="  " \
-        --header "${NF_GEAR}  Select WebApps to remove (space to select, enter to confirm)" \
-        "${choices[@]}")" || {
-            msg_warning "WebApp removal skipped."
-            return 0
-        }
+    local selected
+    selected="$(select_multiple "${NF_GEAR}  Select WebApps to remove" "${choices[@]}")" || {
+        msg_warning "Selection cancelled"
+        return 0
+    }
 
     local -a to_remove=()
-    local name
     while IFS= read -r name; do
         [[ -n "$name" ]] || continue
         to_remove+=("$name")
-    done <<< "$selected_webapps"
+    done <<< "$selected"
 
-    if (( ${#to_remove[@]} == 0 )); then
-        msg_warning "No WebApps selected."
+    (( ${#to_remove[@]} > 0 )) || {
+        msg_warning "No WebApps selected"
         return 0
-    fi
+    }
 
-    # Remove selected desktop files and their icons.
-    local i icon_name output
+    local i icon_name
     for name in "${to_remove[@]}"; do
-        for i in "${!webapp_names[@]}"; do
-            [[ "${webapp_names[$i]}" == "$name" ]] || continue
-
-            icon_name="$(printf '%s\n' "$name" |
-                tr '[:upper:]' '[:lower:]' |
-                sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//')"
-
-            if output="$(rm -f -- \
-                "${webapp_desktop_files[$i]}" \
-                "$ICON_DIR/$icon_name.png" \
-                "$OLD_ICON_DIR/$icon_name.png" 2>&1)"; then
-                msg_success "Removed WebApp: $name"
-            else
-                msg_error "Failed to remove WebApp: $name"
-                printf '%s\n' "$output" >&2
-            fi
+        for i in "${!web_names[@]}"; do
+            [[ "${web_names[$i]}" == "$name" ]] || continue
+            icon_name="$(slugify "$name")"
+            rm -f -- "${web_files[$i]}" "$icon_dir/${icon_name}.png" "$old_icon_dir/${icon_name}.png" 2>/dev/null || true
+            msg_success "Removed WebApp: $name"
             break
         done
     done
 }
 
-# Remove MISE (preinstalled)
 remove_mise() {
+    section "Replace MISE Config & Remove Binaries ${NF_BOLT}"
+    confirm "Replace MISE config with repo config and remove specified binaries?" true || {
+        msg_warning "MISE cleanup skipped"
+        return 0
+    }
+
     local mise_config="$HOME/.config/mise/config.toml"
+    ensure_dir "$(dirname -- "$mise_config")"
 
-    printf '\n'
-    msg_info "Remove Preinstalled MISE Configuration and Binaries"
-    printf '\n'
-
-    gum confirm \
-        "Do you want to remove the preinstalled MISE configuration and binaries?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "MISE removal skipped."
-            return 0
-        }
-
-    if [[ ! -f "$mise_config" ]]; then
-        msg_warning "MISE config not found. Skipping config backup."
-    else
-        if /usr/bin/mv -- "$mise_config" "$mise_config.bak"; then
-            msg_success "MISE config backed up."
-        else
-            msg_error "Failed to back up MISE config."
-            return 1
-        fi
+    if [[ -e "$mise_config" || -L "$mise_config" ]]; then
+        backup_path "$mise_config" || return 1
+        msg_info "Backed up existing mise config"
     fi
 
-    if ln -sf -- "$PROJECT_DIR/config/mise.toml" "$mise_config"; then
-        msg_success "MISE config symlink created."
-    else
-        msg_error "Failed to create MISE config symlink."
-        return 1
-    fi
+    symlink_or_backup "$PROJECT_DIR/config/mise.toml" "$mise_config" || return 1
 
     if (( ${#MISE[@]} == 0 )); then
-        msg_warning "No MISE binaries specified for removal."
+        msg_warning "No MISE binaries listed"
         return 0
     fi
 
-    if /usr/bin/rm -rf -- "${MISE[@]}" > /dev/null 2>&1; then
-        msg_success "Removed MISE binaries."
-    else
-        msg_error "Failed to remove MISE binaries."
-        return 1
-    fi
+    shopt -s nullglob
+    local removed=0
+    for b in "${MISE[@]}"; do
+        if [[ -e "$b" || -L "$b" ]]; then
+            rm -rf -- "$b" 2>/dev/null && ((removed++)) && msg_debug "Removed: $b"
+        fi
+    done
+    shopt -u nullglob
+    msg_success "MISE binaries processed ($removed removed)"
 
-    gum confirm \
-        "Do you want to update mise" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "MISE update skipped."
-            return 0
-        }
-    mise update || {
-        msg_error "Failed to update MISE."
-        return 1
-    }
+    if confirm "Update mise now?" true; then
+        if command -v mise >/dev/null 2>&1; then
+            mise update 2>/dev/null && msg_success "mise updated" || msg_warning "mise update failed"
+        else
+            msg_warning "mise not found in PATH"
+        fi
+    fi
 }
 
-# Check and install Pacman packages if not installed
+# ======================================================= #
+# Installers
+# ======================================================= #
+
 install_pacman_packages() {
-    local package
-    for package in "${PACMAN_PACKAGES[@]}"; do
-        if ! pacman -Qq "$package" >/dev/null 2>&1; then
-            gum confirm \
-                "Package '$package' is not installed. Do you want to install it?" \
-                --default=true \
-                --affirmative="Yes" \
-                --negative="No" || {
-                    msg_warning "Installation of package '$package' skipped."
-                    continue
-                }
-            pacman -S --noconfirm "$package" > /dev/null 2>&1 && msg_success "Installed package: $package" || msg_error "Failed to install package: $package"
-        fi
-    done
-}
+    section "Install Pacman Packages ${NF_PACKAGE}"
+    confirm "Install missing Pacman packages?" true || {
+        msg_warning "Pacman install skipped"
+        return 0
+    }
 
-# Check and install AUR packages if not installed
-install_aur_packages() {
-    local package
-    for package in "${AUR_PACKAGES[@]}"; do
-        if ! pacman -Qq "$package" >/dev/null 2>&1; then
-            gum confirm \
-                "AUR package '$package' is not installed. Do you want to install it?" \
-                --default=true \
-                --affirmative="Yes" \
-                --negative="No" || {
-                    msg_warning "Installation of AUR package '$package' skipped."
-                    continue
-                }
-            # Assuming an AUR helper like yay is installed
-            yay -S --noconfirm "$package" > /dev/null 2>&1 && msg_success "Installed AUR package: $package" || msg_error "Failed to install AUR package: $package"
-        fi
-    done
-}
-
-# Install WebApps
-install_webapps() {
-    local APP_DIR="$HOME/.local/share/applications"
-    local entry app_name app_url icon_file icon_path output
-    local failed=0
-
-    printf '\n'
-    msg_info "Install Preconfigured Web Applications"
-    printf '\n'
-
-    gum confirm \
-        "Do you want to install all preconfigured web applications?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "WebApp installation skipped."
-            return 0
-        }
-
-    if ! command -v omarchy-webapp-install >/dev/null 2>&1; then
-        msg_error "omarchy-webapp-install command not found."
+    require_cmd pacman "pacman" || return 1
+    local -a cmd=()
+    if is_root; then
+        cmd=(pacman -S --noconfirm)
+    elif has_sudo; then
+        cmd=(sudo pacman -S --noconfirm)
+    else
+        msg_error "Root/sudo required for pacman"
         return 1
     fi
 
-    mkdir -p "$APP_DIR" || {
-        msg_error "Failed to create applications directory."
+    local pkg
+    for pkg in "${PACMAN_PACKAGES[@]}"; do
+        if pacman -Qq "$pkg" >/dev/null 2>&1; then
+            msg_debug "Already installed: $pkg"
+            continue
+        fi
+        confirm "Install '$pkg'?" true || {
+            msg_warning "Skipped: $pkg"
+            continue
+        }
+        if "${cmd[@]}" "$pkg" >/dev/null 2>&1; then
+            msg_success "Installed: $pkg"
+        else
+            msg_error "Failed: $pkg"
+        fi
+    done
+}
+
+install_aur_packages() {
+    section "Install AUR Packages ${NF_SPARKLE}"
+    confirm "Install missing AUR packages?" true || {
+        msg_warning "AUR install skipped"
+        return 0
+    }
+
+    local helper=""
+    for h in yay paru paccache aurman trizen; do
+        if command -v "$h" >/dev/null 2>&1; then
+            helper="$h"
+            break
+        fi
+    done
+    [[ -n "$helper" ]] || {
+        msg_error "No AUR helper found (yay/paru/etc.)"
         return 1
     }
 
+    local -a cmd=("$helper" -S --noconfirm)
+    if is_root; then
+        msg_warning "Running AUR helper as root is not recommended; proceeding if allowed"
+    fi
+
+    local pkg
+    for pkg in "${AUR_PACKAGES[@]}"; do
+        if pacman -Qq "$pkg" >/dev/null 2>&1; then
+            msg_debug "Already installed: $pkg"
+            continue
+        fi
+        confirm "Install AUR '$pkg'?" true || {
+            msg_warning "Skipped: $pkg"
+            continue
+        }
+        if "${cmd[@]}" "$pkg" >/dev/null 2>&1; then
+            msg_success "Installed AUR: $pkg"
+        else
+            msg_error "Failed AUR: $pkg"
+        fi
+    done
+}
+
+# ======================================================= #
+# WebApps
+# ======================================================= #
+
+install_webapps() {
+    section "Install WebApps ${NF_DESKTOP}"
+    local app_dir="$HOME/.local/share/applications"
+    ensure_dir "$app_dir"
+
+    confirm "Install all preconfigured WebApps?" true || {
+        msg_warning "WebApp install skipped"
+        return 0
+    }
+
+    require_cmd omarchy-webapp-install "omarchy-webapp-install" || return 1
+
+    local failed=0 entry app_name app_url icon_file icon_path
     for entry in "${WEBAPPS[@]}"; do
         IFS='|' read -r app_name app_url icon_file <<< "$entry"
-
-        if [[ -z "$app_name" || -z "$app_url" ]]; then
+        [[ -n "$app_name" && -n "$app_url" ]] || {
             msg_warning "Invalid WebApp entry: $entry"
-            failed=1
+            ((failed++))
             continue
-        fi
+        }
 
-        printf '\n'
-        msg_info "Installing WebApp: $app_name"
-
-        # CyberChef uses a preconfigured desktop entry for its local file URL.
+        msg_info "Installing: $app_name"
         if [[ "$app_name" == "CyberChef" ]]; then
             local cyberchef_desktop="$PROJECT_DIR/config/cyberchef.desktop"
-
             if [[ ! -f "$cyberchef_desktop" ]]; then
-                msg_error "CyberChef desktop file not found: $cyberchef_desktop"
-                failed=1
+                msg_error "Missing: $cyberchef_desktop"
+                ((failed++))
                 continue
             fi
-
-            if ln -sf -- "$cyberchef_desktop" "$APP_DIR/cyberchef.desktop"; then
-                msg_success "Installed CyberChef desktop entry."
-            else
-                msg_error "Failed to install CyberChef desktop entry."
-                failed=1
-            fi
-
+            symlink_or_backup "$cyberchef_desktop" "$app_dir/cyberchef.desktop" || ((failed++))
             continue
         fi
 
-        # Resolve optional custom icons from project assets.
         icon_path=""
         if [[ -n "$icon_file" ]]; then
             icon_path="$PROJECT_DIR/assets/$icon_file"
-
             if [[ ! -f "$icon_path" ]]; then
-                msg_error "Icon not found for $app_name: $icon_path"
-                failed=1
+                msg_error "Icon missing for $app_name: $icon_path"
+                ((failed++))
                 continue
             fi
         fi
 
-        if output="$(omarchy-webapp-install "$app_name" "$app_url" "$icon_path" 2>&1)"; then
-            msg_success "Installed WebApp: $app_name"
+        local out
+        if out="$(omarchy-webapp-install "$app_name" "$app_url" "$icon_path" 2>&1)"; then
+            msg_success "Installed: $app_name"
         else
-            msg_error "Failed to install WebApp: $app_name"
-            printf '%s\n' "$output" >&2
-            failed=1
+            msg_error "Failed: $app_name"
+            printf '%s\n' "$out" >&2
+            ((failed++))
         fi
     done
 
-    if (( failed != 0 )); then
-        msg_warning "Some WebApps could not be installed."
+    (( failed == 0 )) || {
+        msg_warning "Some WebApps failed ($failed)"
         return 1
-    fi
-
-    msg_success "All WebApps installed successfully."
+    }
+    msg_success "All WebApps installed"
 }
 
-# Install Omarchy plugins
+# ======================================================= #
+# Omarchy Plugins
+# ======================================================= #
+
 install_plugins() {
-    local total="${#OMARCHY_PLUGINS[@]}"
+    section "Install Omarchy Plugins ${NF_STAR}"
+    local total=${#OMARCHY_PLUGINS[@]}
+    (( total > 0 )) || { msg_warning "No plugins defined"; return 0; }
+
+    msg_info "${total} plugins available"
+    confirm "Install all Omarchy plugins?" true || {
+        msg_warning "Plugin install skipped"
+        return 0
+    }
+
+    require_cmd omarchy-plugin-add "omarchy-plugin-add" || return 1
+
     local idx=0 ok=0 fail=0
-    local plugin_name plugin_url plugin_description
+    local plugin_name plugin_url plugin_desc
+    for p in "${OMARCHY_PLUGINS[@]}"; do
+        IFS='|' read -r plugin_name plugin_url plugin_desc <<< "$p"
+        [[ -n "$plugin_name" && -n "$plugin_url" ]] || continue
+        ((idx++))
 
-    printf '\n'
-    gum style \
-        --foreground "#cba6f7" --bold \
-        --border-foreground "#cba6f7" --border rounded \
-        --padding "1 2" \
-        "Omarchy Plugins  ·  ${total} available"
-    printf '\n'
+        local title="${idx}/${total}  ${plugin_name}"
+        [[ -n "$plugin_desc" ]] && title+=" — ${plugin_desc}"
 
-    gum confirm \
-        "Install all ${total} Omarchy plugins?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "Plugin installation skipped."
-            return 0
-        }
-
-    if ! command -v omarchy-plugin-add >/dev/null 2>&1; then
-        msg_error "omarchy-plugin-add command not found."
-        return 1
-    fi
-
-    for plugins in "${OMARCHY_PLUGINS[@]}"; do
-        IFS='|' read -r plugin_name plugin_url plugin_description <<< "$plugins"
-
-        if [[ -z "$plugin_name" || -z "$plugin_url" ]]; then
-            msg_warning "Invalid plugin entry: $plugins"
-            continue
-        fi
-
-        idx=$((idx + 1))
-
-        # ── Spinner title: name + description ──
-        local spin_title="${idx}/${total}  ${plugin_name}"
-        [[ -n "$plugin_description" ]] && spin_title+=" — ${plugin_description}"
-
-        if gum spin \
-            --spinner dot \
-            --title "$spin_title" \
-            -- omarchy-plugin-add "$plugin_url"; then
-
-            ok=$((ok + 1))
-            gum style \
-                --foreground "#a6e3a1" --bold \
-                --padding "0 2" \
-                "✓  ${plugin_name}"
+        if run_spinner "$title" omarchy-plugin-add "$plugin_url"; then
+            ((ok++))
+            gum style --foreground "#a6e3a1" --bold --padding "0 2" "✓  ${plugin_name}"
         else
-            fail=$((fail + 1))
-            gum style \
-                --foreground "#f38ba8" --bold \
-                --padding "0 2" \
-                "✗  ${plugin_name}"
+            ((fail++))
+            gum style --foreground "#f38ba8" --bold --padding "0 2" "✗  ${plugin_name}"
         fi
     done
 
-    # ── Summary ──
     printf '\n'
     if (( fail == 0 )); then
-        gum style \
-            --foreground "#a6e3a1" --bold \
-            --border-foreground "#a6e3a1" --border rounded \
-            --padding "1 2" \
-            "✓  All ${total} Omarchy plugins installed"
+        gum style --foreground "#a6e3a1" --bold --border rounded --border-foreground "#a6e3a1" --padding "1 2" "✓  All ${total} plugins installed"
     elif (( ok == 0 )); then
-        gum style \
-            --foreground "#f38ba8" --bold \
-            --border-foreground "#f38ba8" --border rounded \
-            --padding "1 2" \
-            "✗  All ${total} installations failed"
+        gum style --foreground "#f38ba8" --bold --border rounded --border-foreground "#f38ba8" --padding "1 2" "✗  All failed"
     else
-        gum style \
-            --foreground "#f9e2af" --bold \
-            --border-foreground "#f9e2af" --border rounded \
-            --padding "1 2" \
-            "✓  ${ok} installed   ·   ✗  ${fail} failed   ·   ${total} total"
+        gum style --foreground "#f9e2af" --bold --border rounded --border-foreground "#f9e2af" --padding "1 2" "✓  ${ok} · ✗  ${fail} · ${total} total"
     fi
     printf '\n'
-
     (( fail == 0 ))
 }
 
-# Install Ollama ans download models
+# ======================================================= #
+# Ollama
+# ======================================================= #
+
 install_ollama_models() {
-    local model
-
-    gum confirm \
-        "Do you want to install Ollama and download the preconfigured models?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "Ollama installation skipped."
-            return 0
-        }
-
-    command_exists ollama || {
-        msg_error "ollama command not found. Please install Ollama first."
-        return 1
+    section "Ollama & Models ${NF_FIRE}"
+    confirm "Install Ollama (if missing) and download models?" true || {
+        msg_warning "Ollama setup skipped"
+        return 0
     }
 
-    /usr/bin/curl -fsSL https://ollama.com/install.sh | sh
-
-    for model in "${OLLAMA_MODELS[@]}"; do
-        gum confirm \
-            "Do you want to download Ollama model '$model'?" \
-            --default=true \
-            --affirmative="Yes" \
-            --negative="No" || {
-                msg_warning "Download of Ollama model '$model' skipped."
-                continue
-            }
-        if ollama pull "$model"; then
-            msg_success "Downloaded Ollama model: $model"
+    if ! command -v ollama >/dev/null 2>&1; then
+        confirm "ollama not found. Install via official script?" true || {
+            msg_warning "Ollama install skipped"
+            return 1
+        }
+        if run_spinner "${NF_SERVER}  Installing Ollama..." bash -c 'curl -fsSL https://ollama.com/install.sh | sh'; then
+            msg_success "Ollama installed"
         else
-            msg_error "Failed to download Ollama model: $model"
+            msg_error "Ollama install failed"
+            return 1
+        fi
+    else
+        msg_info "ollama already present"
+    fi
+
+    local model
+    for model in "${OLLAMA_MODELS[@]}"; do
+        confirm "Download model '$model'?" true || {
+            msg_warning "Skipped: $model"
+            continue
+        }
+        if run_spinner "${NF_DATABASE}  Pulling $model..." ollama pull "$model"; then
+            msg_success "Downloaded: $model"
+        else
+            msg_error "Failed: $model"
         fi
     done
 }
 
-# Setup Custom Docker Containers
+# ======================================================= #
+# AI Configs (Claude/OpenCode/Codex)
+# ======================================================= #
+
+setup_claude() {
+    section "Claude Code Setup ${NF_CODE}"
+    confirm "Setup Claude Code config + omniroute?" true || {
+        msg_warning "Claude setup skipped"
+        return 0
+    }
+
+    local dst="$HOME/.claude"
+    local src_cfg="$PROJECT_DIR/config/claude/settings.json"
+    ensure_dir "$dst"
+
+    if [[ -s "$dst/settings.json" ]]; then
+        backup_path "$dst/settings.json" || return 1
+    fi
+    if [[ -s "$src_cfg" ]]; then
+        symlink_or_backup "$src_cfg" "$dst/settings.json" || return 1
+        require_cmd omniroute "omniroute" || return 1
+        if run_spinner "${NF_LINK}  Running omniroute setup-claude..." omniroute setup-claude; then
+            msg_success "omniroute setup-claude done"
+        else
+            msg_error "omniroute setup-claude failed"
+            return 1
+        fi
+    else
+        msg_warning "Missing: $src_cfg"
+    fi
+}
+
+setup_opencode() {
+    section "OpenCode Setup ${NF_CODE}"
+    confirm "Setup OpenCode config + omniroute?" true || {
+        msg_warning "OpenCode setup skipped"
+        return 0
+    }
+
+    local dst="$HOME/.config/opencode"
+    local src_cfg="$PROJECT_DIR/config/opencode/opencode.json"
+    ensure_dir "$dst"
+
+    if [[ -s "$dst/opencode.json" ]]; then
+        backup_path "$dst/opencode.json" || return 1
+    fi
+    if [[ -s "$src_cfg" ]]; then
+        symlink_or_backup "$src_cfg" "$dst/opencode.json" || return 1
+        require_cmd omniroute "omniroute" || return 1
+        if run_spinner "${NF_LINK}  Running omniroute setup-opencode..." omniroute setup-opencode; then
+            msg_success "omniroute setup-opencode done"
+        else
+            msg_error "omniroute setup-opencode failed"
+            return 1
+        fi
+    else
+        msg_warning "Missing: $src_cfg"
+    fi
+}
+
+setup_codex() {
+    section "Codex Setup ${NF_CODE}"
+    confirm "Setup Codex config + omniroute?" true || {
+        msg_warning "Codex setup skipped"
+        return 0
+    }
+
+    local dst="$HOME/.codex"
+    local src_cfg="$PROJECT_DIR/config/codex/config.toml"
+    ensure_dir "$dst"
+
+    if [[ -s "$dst/config.toml" ]]; then
+        backup_path "$dst/config.toml" || return 1
+    fi
+    if [[ -s "$src_cfg" ]]; then
+        symlink_or_backup "$src_cfg" "$dst/config.toml" || return 1
+        require_cmd omniroute "omniroute" || return 1
+        if run_spinner "${NF_LINK}  Running omniroute setup-codex..." omniroute setup-codex; then
+            msg_success "omniroute setup-codex done"
+        else
+            msg_error "omniroute setup-codex failed"
+            return 1
+        fi
+    else
+        msg_warning "Missing: $src_cfg"
+    fi
+}
+
+install_omniroute() {
+    section "Omniroute ${NF_LAUNCH}"
+    confirm "Install omniroute globally (npm)?" true || {
+        msg_warning "Omniroute install skipped"
+        return 0
+    }
+    require_cmd npm "npm" || return 1
+    if run_spinner "${NF_BOX}  Installing omniroute..." npm install -g omniroute; then
+        msg_success "omniroute installed"
+    else
+        msg_error "omniroute install failed"
+        return 1
+    fi
+}
+
+# ======================================================= #
+# Docker Containers
+# ======================================================= #
+
 setup_docker_containers() {
+    section "Docker Containers ${NF_SERVER}"
+    require_cmd docker "docker" || return 1
+
+    local dc=""
+    if command -v docker-compose >/dev/null 2>&1; then
+        dc="docker-compose"
+    elif docker compose version >/dev/null 2>&1; then
+        dc="docker compose"
+    else
+        msg_error "docker-compose or 'docker compose' not found"
+        return 1
+    fi
+    msg_debug "Using: $dc"
 
     local atuin_ai="$PROJECT_DIR/containers/atuin"
     local open_webui="$PROJECT_DIR/containers/open-webui"
     local outline="$PROJECT_DIR/containers/outline"
     local snapotter="$PROJECT_DIR/containers/snapotter"
 
-    command_exists docker || {
-        msg_error "docker command not found. Please install Docker first."
-        return 1
-    }
-
-    command_exists docker-compose || {
-        msg_error "docker-compose command not found. Please install Docker Compose first."
-        return 1
-    }
-
-    # Atuin Ai Container
-    gum confirm \
-        "Do you want to set up Atuin-Ai container?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "Atuin-Ai container setup skipped."
-            return 0
-        }
-
-    if [[ ! -d $HOME_DIR/.config/atuin-ai-server ]]; then
-        msg_error "Atuin-Ai config directory not found: $HOME_DIR/.config/atuin-ai-server"
-        /usr/bin/mkdir -p "$HOME_DIR/.config/atuin-ai-server"
-        ln -sf "$PROJECT_DIR/config/atuin-ai-server.toml" "$HOME_DIR/.config/atuin-ai-server/config.toml"
-    else
-        msg_info "Atuin-Ai config directory already exists: $HOME_DIR/.config/atuin-ai-server"
-        /usr/bin/mv -- "$HOME_DIR/.config/atuin-ai-server/config.toml" "$HOME_DIR/.config/atuin-ai-server/config.toml.bak" || {
-            msg_error "Failed to backup existing Atuin-Ai config."
+    # Atuin
+    confirm "Setup Atuin-AI container?" true || { msg_warning "Atuin-AI skipped"; }
+    if confirm "Setup Atuin-AI container?" true 2>/dev/null; then
+        true
+    fi
+    # simpler: run if confirmed
+    if confirm "Setup Atuin-AI container?" true; then
+        [[ -d "$atuin_ai" ]] || { msg_error "Missing: $atuin_ai"; return 1; }
+        local cfg="$HOME/.config/atuin-ai-server"
+        ensure_dir "$cfg"
+        [[ -s "$cfg/config.toml" ]] && backup_path "$cfg/config.toml"
+        symlink_or_backup "$PROJECT_DIR/config/atuin-ai-server.toml" "$cfg/config.toml" || return 1
+        if run_spinner "${NF_SERVER}  Starting atuin-ai..." $dc -f "$atuin_ai/docker-compose.yml" up -d; then
+            msg_success "Atuin-AI up"
+        else
+            msg_error "Atuin-AI failed"
             return 1
-        }
-        ln -sf "$PROJECT_DIR/config/atuin-ai-server.toml" "$HOME_DIR/.config/atuin-ai-server/config.toml"
-        msg_success "Atuin-Ai config symlink created: $HOME_DIR/.config/atuin-ai-server/config.toml"
+        fi
     fi
 
-
-    if [[ ! -d "$atuin_ai" ]]; then
-        msg_error "Atuin-Ai container directory not found: $atuin_ai"
-        return 1
+    if confirm "Setup Open-WebUI container?" true; then
+        [[ -d "$open_webui" ]] || { msg_error "Missing: $open_webui"; return 1; }
+        if run_spinner "${NF_SERVER}  Starting open-webui..." $dc -f "$open_webui/docker-compose.yml" up -d; then
+            msg_success "Open-WebUI up"
+        else
+            msg_error "Open-WebUI failed"
+            return 1
+        fi
     fi
 
-    docker-compose -f "$atuin_ai/docker-compose.yml" up -d || {
-        msg_error "Failed to set up Atuin-Ai container."
-        return 1
-    }
-
-    #  Open WebUI Container
-    gum confirm \
-        "Do you want to set up Open-WebUI container?" \
-        --default=true \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "Open-WebUI container setup skipped."
-            return 0
-        }
-
-    if [[ ! -d "$open_webui" ]]; then
-        msg_error "Open-WebUI container directory not found: $open_webui"
-        return 1
+    if confirm "Setup Outline container?" false; then
+        [[ -d "$outline" ]] || { msg_error "Missing: $outline"; return 1; }
+        if run_spinner "${NF_SERVER}  Starting outline..." $dc -f "$outline/docker-compose.yml" up -d; then
+            msg_success "Outline up"
+        else
+            msg_error "Outline failed"
+            return 1
+        fi
     fi
 
-    docker-compose -f "$open_webui/docker-compose.yml" up -d || {
-        msg_error "Failed to set up Open-WebUI container."
-        return 1
-    }
-
-    # Outline Container
-    gum confirm \
-        "Do you want to set up Outline container?" \
-        --default=false \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "Outline container setup skipped."
-            return 0
-        }
-
-    if [[ ! -d "$outline" ]]; then
-        msg_error "Outline container directory not found: $outline"
-        return 1
+    if confirm "Setup Snapotter container?" false; then
+        [[ -d "$snapotter" ]] || { msg_error "Missing: $snapotter"; return 1; }
+        if run_spinner "${NF_SERVER}  Starting snapotter..." $dc -f "$snapotter/docker-compose.yml" up -d; then
+            msg_success "Snapotter up"
+        else
+            msg_error "Snapotter failed"
+            return 1
+        fi
     fi
-
-    docker-container -f "$outline/docker-compose.yml" up -d || {
-        msg_error "Failed to set up Outline container."
-        return 1
-    }
-
-    #  Snapotter Container
-    gum confirm \
-        "Do you want to set up Snapotter container?" \
-        --default=false \
-        --affirmative="Yes" \
-        --negative="No" || {
-            msg_warning "Snapotter container setup skipped."
-            return 0
-        }
-
-    if [[ ! -d "$snapotter" ]]; then
-        msg_error "Snapotter container directory not found: $snapotter"
-        return 1
-    fi
-
-    docker-compose -f "$snapotter/docker-compose.yml" up -d || {
-        msg_error "Failed to set up Snapotter container."
-        return 1
-    }
 }
 
 # ======================================================= #
-# Main Script
+# Directories & Bins & Scripts
+# ======================================================= #
+
+create_dirs() {
+    section "Create Directories ${NF_FOLDER}"
+    local dirs=("$HOME_DIR/Github" "$HOME_DIR/Projects" "$HOME_DIR/.ISO" "$HOME_DIR/.VM")
+    local d
+    for d in "${dirs[@]}"; do
+        if [[ -d "$d" ]]; then
+            msg_info "Exists: $d"
+            continue
+        fi
+        confirm "Create '$d'?" true || {
+            msg_warning "Skipped: $d"
+            continue
+        }
+        ensure_dir "$d" && msg_success "Created: $d" || msg_error "Failed: $d"
+    done
+}
+
+setup_custom_bin() {
+    section "Custom Bin Symlinks ${NF_TERMINAL}"
+    local custom_bin="$PROJECT_DIR/bin"
+    [[ -d "$custom_bin" ]] || { msg_error "Missing: $custom_bin"; return 1; }
+    ensure_dir "$HOME_DIR/.local/bin"
+
+    confirm "Symlink all files from bin/ to ~/.local/bin/?" true || {
+        msg_warning "Custom bin skipped"
+        return 0
+    }
+
+    shopt -s nullglob
+    local f linked=0
+    for f in "$custom_bin"/*; do
+        [[ -f "$f" ]] || continue
+        local base
+        base="$(basename -- "$f")"
+        local dst="$HOME_DIR/.local/bin/$base"
+        if [[ -e "$dst" || -L "$dst" ]]; then
+            backup_path "$dst" || continue
+        fi
+        if ln -sf -- "$f" "$dst"; then
+            ((linked++))
+            msg_debug "Linked: $base"
+        else
+            msg_error "Failed: $base"
+        fi
+    done
+    shopt -u nullglob
+    chmod +x "$HOME_DIR/.local/bin"/* 2>/dev/null || true
+    msg_success "Custom bin linked ($linked files)"
+}
+
+setup_omarchy_overwrites() {
+    section "Omarchy Script Overwrites ${NF_SETTINGS}"
+    local custom_scripts="$PROJECT_DIR/scripts"
+    [[ -d "$custom_scripts" ]] || { msg_error "Missing: $custom_scripts"; return 1; }
+
+    ensure_dir "$OMARCHY_BIN"
+
+    confirm "Overwrite Omarchy system scripts with custom versions?" true || {
+        msg_warning "Omarchy overwrites skipped"
+        return 0
+    }
+
+    local sudo_arr=()
+    if ! is_root && has_sudo; then
+        sudo_arr=(sudo)
+    elif ! is_root; then
+        msg_error "Root/sudo required to write to $OMARCHY_BIN"
+        return 1
+    fi
+
+    local pairs=(
+        "omarchy-snapshot|omarchy-snapshot|ln"
+        "omarchy-windows-vm|omarchy-windows-vm|install"
+        "omarchy-macos-vm|omarchy-macos-vm|install"
+        "omarchy-setup-security-fingerprint|omarchy-fingerprint-setup|ln"
+    )
+    local p src dst mode
+    for p in "${pairs[@]}"; do
+        IFS='|' read -r src dst mode <<< "$p"
+        local csrc="$custom_scripts/$src"
+        local cdst="$OMARCHY_BIN/$dst"
+        [[ -f "$csrc" ]] || {
+            msg_warning "Custom script missing: $csrc"
+            continue
+        }
+        if [[ -e "$cdst" || -L "$cdst" ]]; then
+            if is_root || has_sudo; then
+                "${sudo_arr[@]}" /usr/bin/mv -- "$cdst" "${cdst}.bak" 2>/dev/null || true
+            else
+                backup_path "$cdst" 2>/dev/null || true
+            fi
+        fi
+        if [[ "$mode" == "install" ]]; then
+            if "${sudo_arr[@]}" install -Dm755 -- "$csrc" "$cdst"; then
+                msg_success "Installed: $dst"
+            else
+                msg_error "Failed install: $dst"
+            fi
+        else
+            if "${sudo_arr[@]}" ln -sf -- "$csrc" "$cdst"; then
+                msg_success "Symlinked: $dst"
+            else
+                msg_error "Failed symlink: $dst"
+            fi
+        fi
+    done
+}
+
+# ======================================================= #
+# Menu
+# ======================================================= #
+
+show_menu() {
+    clear
+    banner
+
+    gum style \
+        --foreground "#cba6f7" \
+        --bold \
+        --border rounded \
+        --border-foreground "#cba6f7" \
+        --padding "1 2" \
+        "${NF_LIST}  INTERACTIVE MENU"
+
+    printf '\n'
+
+    local choice
+    choice="$(gum choose \
+        --header "${NF_GEAR}  Select action (Enter to run)" \
+        --cursor="${NF_ARROW} " \
+        --selected-prefix="${NF_CHECK} " \
+        --unselected-prefix="  " \
+        "1. Full Bootstrap (All)" \
+        "2. System Snapshot" \
+        "3. Cleanup: Bloat/TUIs/WebApps/MISE" \
+        "4. Packages: Pacman + AUR" \
+        "5. Install: WebApps" \
+        "6. Install: Omarchy Plugins" \
+        "7. Ollama: Install + Models" \
+        "8. AI: Claude Setup" \
+        "9. AI: OpenCode Setup" \
+        "10. AI: Codex Setup" \
+        "11. Omniroute: Install" \
+        "12. Containers: Setup (Atuin/OpenWebUI/Outline/SnapOtter)" \
+        "13. Directories: Create (Github/Projects/.ISO/.VM)" \
+        "14. Bins: Symlink custom bin/" \
+        "15. Omarchy: Overwrite system scripts" \
+        "16. View bootstrap.log" \
+        "17. Show Version" \
+        "18. Toggle Debug (current: ${DEBUG})" \
+        "0. Exit")" || return 1
+
+    case "$choice" in
+        *"1. Full"*) run_full ;;
+        *"2. System"*) snapshot; pause ;;
+        *"3. Cleanup"*)
+            remove_packages; remove_tui; remove_webapps; remove_mise; pause
+            ;;
+        *"4. Packages"*)
+            install_pacman_packages; install_aur_packages; pause
+            ;;
+        *"5. Install: WebApps"*) install_webapps; pause ;;
+        *"6. Install: Omarchy Plugins"*) install_plugins; pause ;;
+        *"7. Ollama"*) install_ollama_models; pause ;;
+        *"8. AI: Claude"*) setup_claude; pause ;;
+        *"9. AI: OpenCode"*) setup_opencode; pause ;;
+        *"10. AI: Codex"*) setup_codex; pause ;;
+        *"11. Omniroute"*) install_omniroute; pause ;;
+        *"12. Containers"*) setup_docker_containers; pause ;;
+        *"13. Directories"*) create_dirs; pause ;;
+        *"14. Bins"*) setup_custom_bin; pause ;;
+        *"15. Omarchy"*) setup_omarchy_overwrites; pause ;;
+        *"16. View"*)
+            if [[ -f "$LOG_FILE" ]]; then
+                less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
+            else
+                msg_warning "Log file not found: $LOG_FILE"
+            fi
+            pause
+            ;;
+        *"17. Show"*)
+            printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
+            pause
+            ;;
+        *"18. Toggle"*)
+            if (( DEBUG == 0 )); then
+                DEBUG=1
+                trap '__debug_trace' DEBUG
+                msg_success "Debug enabled"
+            else
+                DEBUG=0
+                trap - DEBUG
+                msg_info "Debug disabled"
+            fi
+            pause
+            ;;
+        *"0. Exit"*) exit 0 ;;
+        *) msg_warning "Invalid choice" ;;
+    esac
+
+    show_menu
+}
+
+main_menu() {
+    while true; do
+        show_menu || break
+    done
+}
+
+# ======================================================= #
+# Full Bootstrap Flow
+# ======================================================= #
+
+run_full() {
+    banner
+    init_logger || { msg_error "Logger init failed"; return 1; }
+    check_dependencies || return 1
+
+    snapshot || { msg_error "Snapshot step failed"; return 1; }
+
+    section "Cleanup"
+    remove_packages
+    remove_tui
+    remove_webapps
+    remove_mise
+    pause "Continue to directories?" || return 1
+
+    banner
+    section "Directories"
+    create_dirs
+    pause "Continue to package installs?" || return 1
+
+    banner
+    section "Packages"
+    install_pacman_packages || msg_warning "Some pacman packages had issues"
+    install_aur_packages || msg_warning "Some AUR packages had issues"
+    pause "Continue to WebApps?" || return 1
+
+    banner
+    section "WebApps & Plugins"
+    install_webapps || msg_warning "Some WebApps had issues"
+    install_plugins || msg_warning "Some plugins had issues"
+    pause "Continue to AI tools?" || return 1
+
+    banner
+    section "AI Tools"
+    install_ollama_models || msg_warning "Ollama/models had issues"
+    install_omniroute || msg_warning "Omniroute had issues"
+    setup_claude || msg_warning "Claude setup had issues"
+    setup_opencode || msg_warning "OpenCode setup had issues"
+    setup_codex || msg_warning "Codex setup had issues"
+    pause "Continue to containers?" || return 1
+
+    banner
+    section "Containers & Customizations"
+    setup_docker_containers || msg_warning "Containers had issues"
+    setup_custom_bin || msg_warning "Custom bin had issues"
+    setup_omarchy_overwrites || msg_warning "Omarchy overwrites had issues"
+
+    banner
+    printf '\n'
+    gum style \
+        --foreground "#a6e3a1" \
+        --bold \
+        --border double \
+        --border-foreground "#a6e3a1" \
+        --padding "1 2" \
+        "${NF_CHECK}  BOOTSTRAP COMPLETE"
+    printf '\n'
+    msg_info "Logs: $LOG_FILE"
+    msg_info "Project: $PROJECT_DIR"
+    pause "Done"
+}
+
+# ======================================================= #
+# Main
 # ======================================================= #
 
 main() {
+    shopt -s nullglob extglob
     parse_arguments "$@"
-    #  Display the project banner.
-    banner
-    # Innitialize logger before any logging occurs.
-    init_logger
-    # Check dependencies before using gum or Omarchy commands.
-    check_dependencies || exit 1
-    # Create a snapshot of the current system state before proceeding.
-    snapshot || exit 1
-    # Remove preinstalled bloatware packages.
-    remove_packages
-    # Remove preinstalled TUIs.
-    remove_tui
-    # Remove preinstalled WebApps.
-    remove_webapps
-    # Remove preinstalled Mise
-    remove_mise
 
-    # press any key to continue
-    printf '\n'
-    gum confirm \
-        "Press any key to continue..." \
-        --default=true \
-        --affirmative="Continue" \
-        --negative="Exit" || {
-            msg_warning "Setup exited by user."
-            exit 0
-        }
-
-    # Display banner again after all operations are complete.
-    banner
-
-    # Create Github directory
-    confirm_create_dir $HOME_DIR/Github || {
-        msg_warning "Github directory creation skipped."
-    }
-
-    # Create Projects directory
-    confirm_create_dir $HOME_DIR/Projects || {
-        msg_warning "Projects directory creation skipped."
-    }
-
-    #  Create .ISO directory
-    confirm_create_dir $HOME_DIR/.ISO || {
-        msg_warning ".ISO directory creation skipped."
-    }
-
-    #  Create .VM directory
-    confirm_create_dir $HOME_DIR/.VM || {
-        msg_warning ".VM directory creation skipped."
-    }
-
-    # press any key to continue
-    printf '\n'
-    gum confirm \
-        "Press any key to continue..." \
-        --default=true \
-        --affirmative="Continue" \
-        --negative="Exit" || {
-            msg_warning "Setup exited by user."
-            exit 0
-        }
-
-    # Display banner again after all operations are complete.
-    banner
-
-    # Install Pacman packages
-    install_pacman_packages || {
-        msg_error "Failed to install some Pacman packages."
-        exit 1
-    }
-
-    # Install AUR packages
-    install_aur_packages || {
-        msg_error "Failed to install some AUR packages."
-        exit 1
-    }
-
-    # Install Webapps
-    install_webapps || {
-        msg_error "Failed to install some WebApps."
-        exit 1
-    }
-
-    # press any key to continue
-    printf '\n'
-    gum confirm \
-        "Press any key to continue..." \
-        --default=true \
-        --affirmative="Continue" \
-        --negative="Exit" || {
-            msg_warning "Setup exited by user."
-            exit 0
-        }
-
-    # Display banner again after all operations are complete.
-    banner
-
-    # Install Omarchy plugins
-    install_plugins || {
-        msg_error "Failed to install some Omarchy plugins."
-        exit 1
-    }
-
-    # press any key to continue
-    printf '\n'
-    gum confirm \
-        "Press any key to continue..." \
-        --default=true \
-        --affirmative="Continue" \
-        --negative="Exit" || {
-            msg_warning "Setup exited by user."
-            exit 0
-        }
-
-    # Display banner again after all operations are complete.
-    banner
-
-    # Install Ollama and download models
-    install_ollama_models || {
-        msg_error "Failed to install Ollama or download some models."
-        exit 1
-    }
-
-    # press any key to continue
-    printf '\n'
-    gum confirm \
-        "Press any key to continue..." \
-        --default=true \
-        --affirmative="Continue" \
-        --negative="Exit" || {
-            msg_warning "Setup exited by user."
-            exit 0
-        }
-
-    # Display banner again after all operations are complete.
-    banner
-
-    # Install Omniroute
-    gum confirm \
-    "Do you want to install omniroute?" \
-    --default=true \
-    --affirmative="Yes" \
-    --negative="No" || {
-        msg_warning "Omniroute installation skipped."
-        return 0
-    }
-
-    command_exists npm || {
-        msg_error "npm command not found. Please install Node.js and npm first."
-        exit 1
-    }
-
-    npm install -g omniroute || {
-        msg_error "Failed to install omniroute."
-        exit 1
-    }
-
-    # Setup Claude code
-    gum confirm \
-    "Do you want to setup Claude code?" \
-    --default=true \
-    --affirmative="Yes" \
-    --negative="No" || {
-        msg_warning "Claude code setup skipped."
-        return 0
-    }
-
-    if [[ -s $HOME_DIR/.claude/settings.json ]]; then
-        /usr/bin/mv -- "$HOME_DIR/.claude/settings.json" "$HOME_DIR/.claude/settings.json.bak" || {
-            msg_error "Failed to backup existing Claude settings."
-            exit 1
-        }
-        msg_success "Existing Claude settings backed up."
+    if [[ "${BOOTSTRAP_SHOW_MENU:-0}" == "1" ]]; then
+        main_menu
+        exit 0
     fi
 
-    if [[ -s $PROJECT_DIR/config/claude/settings.json ]]; then
-        ln -sf -- "$PROJECT_DIR/config/claude/settings.json" "$HOME_DIR/.claude/settings.json" || {
-            msg_error "Failed to create symlink for Claude settings."
-            exit 1
-        }
-        msg_success "Claude settings symlink created."
-
-        #  Run Omniroute Claude Setup
-        if  omniroute setup-claude ; then
-            msg_success "Omniroute Claude setup completed successfully."
-        else
-            msg_error "Omniroute Claude setup failed."
-            exit 1
-        fi
-    else
-        msg_warning "Claude settings file not found in project config."
-    fi
-
-    # Setup Open code
-    gum confirm \
-    "Do you want to setup Open code?" \
-    --default=true \
-    --affirmative="Yes" \
-    --negative="No" || {
-        msg_warning "Open code setup skipped."
-        return 0
-    }
-
-    if [[ -s $HOME_DIR/.config/opencode/opencode.json ]]; then
-        /usr/bin/mv -- "$HOME_DIR/.config/opencode/opencode.json" "$HOME_DIR/.config/opencode/opencode.json.bak" || {
-            msg_error "Failed to backup existing Open Code settings."
-            exit 1
-        }
-        msg_success "Existing Open Code settings backed up."
-    fi
-
-    if [[ -s $PROJECT_DIR/config/opencode/opencode.json ]]; then
-        ln -sf -- "$PROJECT_DIR/config/opencode/opencode.json" "$HOME_DIR/.config/opencode/opencode.json" || {
-            msg_error "Failed to create symlink for Open code settings."
-            exit 1
-        }
-        msg_success "Open code settings symlink created."
-
-        #  Run Omniroute Opencode Setup
-        if  omniroute setup-opencode ; then
-            msg_success "Omniroute Opencode setup completed successfully."
-        else
-            msg_error "Omniroute Opencode setup failed."
-            exit 1
-        fi
-    else
-        msg_warning "Open code settings file not found in project config."
-    fi
-
-    # Setup Codex
-    gum confirm \
-    "Do you want to setup Codex?" \
-    --default=true \
-    --affirmative="Yes" \
-    --negative="No" || {
-        msg_warning "Codex setup skipped."
-        return 0
-    }
-
-    if [[ -s $HOME_DIR/.codex/config.toml ]]; then
-        /usr/bin/mv -- "$HOME_DIR/.codex/config.toml" "$HOME_DIR/.codex/config.toml.bak" || {
-            msg_error "Failed to backup existing Codex settings."
-            exit 1
-        }
-        msg_success "Existing Codex settings backed up."
-    fi
-
-    if [[ -s $PROJECT_DIR/config/codex/config.toml ]]; then
-        ln -sf -- "$PROJECT_DIR/config/codex/config.toml" "$HOME_DIR/.codex/config.toml" || {
-            msg_error "Failed to create symlink for Codex settings."
-            exit 1
-        }
-        msg_success "Codex settings symlink created."
-
-        #  Run Omniroute Codex Setup
-        if  omniroute setup-codex ; then
-            msg_success "Omniroute Codex setup completed successfully."
-        else
-            msg_error "Omniroute Codex setup failed."
-            exit 1
-        fi
-    else
-        msg_warning "Codex settings file not found in project config."
-    fi
-
-
-    # Display banner again after all operations are complete.
-    banner
-
-    # Setup Docker Containers
-    gum confirm \
-    "Do you want to setup Docker containers?" \
-    --default=true \
-    --affirmative="Yes" \
-    --negative="No" || {
-        msg_warning "Docker containers setup skipped."
-        return 0
-    }
-
-    setup_docker_containers || {
-        msg_error "Failed to setup Docker containers."
-        exit 1
-    }
-
-    # Display banner again after all operations are complete.
-    banner
-
-    # Setup Custom Bin Folder
-    gum confirm \
-    "Do you want to setup Custom Bin Folder?" \
-    --default=true \
-    --affirmative="Yes" \
-    --negative="No" || {
-        msg_warning "Custom Bin Folder setup skipped."
-        return 0
-    }
-
-    local CUSTOM_BIN="$PROJECT_DIR/bin"
-    if [[ ! -d "$CUSTOM_BIN" ]]; then
-        msg_error "Custom bin directory not found: $CUSTOM_BIN"
-        return 1
-    fi
-
-    ln -sf -- "$CUSTOM_BIN"/* "$HOME_DIR/.local/bin/" || {
-        msg_error "Failed to create symlink for Custom Bin Folder."
-        exit 1
-    }
-
-    # Display banner again after all operations are complete.
-    banner
-
-    # Setup Custom Omarchy Scripts Overwrites
-    gum confirm \
-    "Do you want to setup Custom Omarchy Scripts Overwrites?" \
-    --default=true \
-    --affirmative="Yes" \
-    --negative="No" || {
-        msg_warning "Custom Omarchy Scripts Overwrites setup skipped."
-        return 0
-    }
-
-    local CUSTOM_SCRIPTS="$PROJECT_DIR/scripts"
-    local OMARCHY_BIN="/usr/share/omarchy/bin"
-    if [[ ! -d "$CUSTOM_SCRIPTS" ]]; then
-        msg_error "Custom scripts directory not found: $CUSTOM_SCRIPTS"
-        return 1
-    fi
-
-    # Omarchy Snapshot Script
-    if [[ "$OMARCHY_BIN/omarchy-snapshot" ]]; then
-        /usr/bin/mv -- "$OMARCHY_BIN/omarchy-snapshot" "$OMARCHY_BIN/omarchy-snapshot.bak"
-        ln -sf -- "$CUSTOM_SCRIPTS/omarchy-snapshot" "$OMARCHY_BIN/omarchy-snapshot" || {
-            msg_error "Failed to overwrite omarchy-snapshot script."
-            exit 1
-        }
-    fi
-
-    # Omarchy Windows Vm  Script
-    if [[ "$OMARCHY_BIN/omarchy-windows-vm" ]]; then
-        /usr/bin/mv -- "$OMARCHY_BIN/omarchy-windows-vm" "$OMARCHY_BIN/omarchy-windows-vm.bak"
-        sudo install -m 755 "$CUSTOM_SCRIPTS/omarchy-windows-vm" "$OMARCHY_BIN/omarchy-windows-vm" || {
-            msg_error "Failed to overwrite omarchy-windows-vm script."
-            exit 1
-        }
-    fi
-
-    # Custom Omarchy MacOs Vm Script
-    if [[ "$OMARCHY_BIN/omarchy-macos-vm" ]]; then
-        /usr/bin/mv -- "$OMARCHY_BIN/omarchy-macos-vm" "$OMARCHY_BIN/omarchy-macos-vm.bak"
-        sudo install -Dm755 "$CUSTOM_SCRIPTS/omarchy-macos-vm" "$OMARCHY_BIN/omarchy-macos-vm" || {
-            msg_error "Failed to overwrite omarchy-macos-vm script."
-            exit 1
-        }
-    fi
-
-    # Omarchy Fingerprint Setup
-    if [[ "$OMARCHY_BIN/omarchy-fingerprint-setup" ]]; then
-        /usr/bin/mv -- "$OMARCHY_BIN/omarchy-fingerprint-setup" "$OMARCHY_BIN/omarchy-fingerprint-setup.bak"
-        ln -sf "$CUSTOM_SCRIPTS/omarchy-fingerprint-setup" "$OMARCHY_BIN/omarchy-fingerprint-setup" || {
-            msg_error "Failed to overwrite omarchy-fingerprint-setup script."
-            exit 1
-        }
-    fi
+    run_full
 }
 
 main "$@"
