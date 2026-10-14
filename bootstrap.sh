@@ -1419,6 +1419,40 @@ setup_dotfiles() {
         msg_warning "Git config setup skipped"
     fi
 
+    # Atuin config
+    if confirm "Setup Atuin config (~/.config/atuin/config.toml)?" false; then
+        local src="$dotfiles_dir/atuin/config.toml"
+        local dst="$HOME/.config/atuin/config.toml"
+        local theme_dir="$dotfiles_dir/atuin/themes"
+        local dst_theme_dir="$HOME/.config/atuin/themes"
+        # Check missing dependencies
+        command_exists atuin || msg_warning "Missing: atuin (shell history manager)"
+        [[ -f "$src" ]] || { msg_warning "Missing: $src"; return 0; }
+        ensure_dir "$(dirname -- "$dst")"
+        [[ -e "$dst" || -L "$dst" ]] && backup_path "$dst"
+        if symlink_or_backup "$src" "$dst"; then
+            msg_success "Atuin config linked"
+        else
+            msg_error "Failed to link Atuin config"
+        fi
+        if [[ -d "$theme_dir" ]]; then
+            ensure_dir "$dst_theme_dir"
+            for theme_file in "$theme_dir"/*; do
+                local theme_name
+                theme_name="$(basename -- "$theme_file")"
+                local dst_theme_file="$dst_theme_dir/$theme_name"
+                [[ -e "$dst_theme_file" || -L "$dst_theme_file" ]] && backup_path "$dst_theme_file"
+                if symlink_or_backup "$theme_file" "$dst_theme_file"; then
+                    msg_success "Atuin theme linked: $theme_name"
+                else
+                    msg_error "Failed to link Atuin theme: $theme_name"
+                fi
+            done
+        fi
+    else
+        msg_warning "Atuin config setup skipped"
+    fi
+
     msg_info "Dotfiles setup complete (only items you confirmed were applied)"
 }
 
