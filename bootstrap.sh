@@ -1453,6 +1453,23 @@ setup_dotfiles() {
         msg_warning "Atuin config setup skipped"
     fi
 
+    # Starship Config
+    if confirm "Setup Starship config (~/.config/starship.toml)?" false; then
+        local src="$dotfiles_dir/starship/starship.toml"
+        local dst="$HOME/.config/starship.toml"
+        command_exists starship || msg_warning "Missing: starship (shell prompt)"
+        [[ -f "$src" ]] || { msg_warning "Missing: $src"; return 0; }
+        ensure_dir "$(dirname -- "$dst")"
+        [[ -e "$dst" || -L "$dst" ]] && backup_path "$dst"
+        if symlink_or_backup "$src" "$dst"; then
+            msg_success "Starship config linked"
+        else
+            msg_error "Failed to link Starship config"
+        fi
+    else
+        msg_warning "Starship config setup skipped"
+    fi
+
     msg_info "Dotfiles setup complete (only items you confirmed were applied)"
 }
 

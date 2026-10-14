@@ -1,0 +1,355 @@
+"$schema" = "https://starship.rs/config-schema.json"
+
+# ╭──────────────────────────────────────────────╮
+# │              STARSHIP · MOCHA                │
+# ╰──────────────────────────────────────────────╯
+
+command_timeout = 2000
+scan_timeout = 1000
+add_newline = true
+continuation_prompt = "[▸▹ ](dimmed white)"
+palette = "catppuccin_mocha"
+
+# ────────────────────────────────────────────────
+# LEFT PROMPT · IDENTITY / LOCATION / GIT
+# ────────────────────────────────────────────────
+
+format = """
+[](fg:surface0)\
+$os\
+$username\
+[](fg:surface0 bg:teal)\
+[](fg:teal bg:blue)\
+[](fg:blue bg:teal)\
+[](fg:teal bg:peach)\
+$directory\
+$git_branch\
+$git_metrics\
+$git_status\
+[](fg:peach)\
+$line_break\
+$character"""
+
+# ────────────────────────────────────────────────
+# RIGHT PROMPT · RUNTIMES / ENVIRONMENT / METADATA
+# ────────────────────────────────────────────────
+
+right_format = """
+$c\
+$rust\
+$golang\
+$nodejs\
+$bun\
+$php\
+$java\
+$kotlin\
+$haskell\
+$python\
+${custom.venv}\
+$conda\
+$docker_context\
+${custom.shell}\
+${custom.hugo}\
+$localip\
+$cmd_duration\
+$time"""
+
+# ────────────────────────────────────────────────
+# GLOBAL SPACING
+# ────────────────────────────────────────────────
+
+[fill]
+symbol = " "
+
+# ────────────────────────────────────────────────
+# SYSTEM IDENTITY
+# ────────────────────────────────────────────────
+
+[os]
+disabled = false
+style = "bg:surface0 fg:lavender bold"
+format = "[ $symbol ]($style)"
+
+[username]
+show_always = true
+style_user = "bg:surface0 fg:text bold"
+style_root = "bg:surface0 fg:red bold"
+format = "[$user ]($style)"
+
+[os.symbols]
+Windows = ""
+Ubuntu = "󰕈"
+SUSE = ""
+Raspbian = "󰐿"
+Mint = "󰣭"
+Macos = "󰀵"
+Manjaro = ""
+Linux = "󰌽"
+Gentoo = "󰣨"
+Fedora = "󰣛"
+Alpine = ""
+Amazon = ""
+Android = ""
+AOSC = ""
+Arch = "󰣇"
+Artix = "󰣇"
+CentOS = ""
+Debian = "󰣚"
+Redhat = "󱄛"
+RedHatEnterprise = "󱄛"
+
+# ────────────────────────────────────────────────
+# DIRECTORY · WARM PEACH
+# ────────────────────────────────────────────────
+
+[directory]
+style = "fg:mantle bg:peach bold"
+format = "[ $path ]($style)"
+truncation_length = 1
+truncation_symbol = ""
+
+[directory.substitutions]
+"Desktop" = "  Desktop"
+"Documents" = "󰈙 Documents"
+"Downloads" = " Downloads"
+"Music" = "󰝚 Music"
+"Pictures" = " Pictures"
+"Videos" = "󰕧 Videos"
+"home" = "󰋜 Home"
+"~" = "󰋜 Home"
+"Config" = " Config"
+".config" = " Config"
+"Fonts" = " Fonts"
+"lib" = "󰏗 lib"
+"bin" = "󰆍 bin"
+"assets" = "󰄦 assets"
+"node_modules" = " node_modules"
+"github" = "󰊤 Github"
+"Github" = "󰊤 Github"
+"gitlab" = "󰮠 Gitlab"
+"Gitlab" = "󰮠 Gitlab"
+".local" = "󰉋 Local"
+".ssh" = "󰒋 SSH"
+
+# ────────────────────────────────────────────────
+# GIT · MAUVE / MINT
+# ────────────────────────────────────────────────
+
+[git_branch]
+symbol = ""
+style = "bg:green fg:base bold"
+format = "[](fg:peach bg:green)[ $symbol $branch ]($style)"
+truncation_symbol = "…"
+truncation_length = 20
+only_attached = true
+
+[git_metrics]
+disabled = false
+ignore_submodules = true
+only_nonzero_diffs = true
+format = "([](fg:green bg:mauve)[ +$added ]($added_style))([](fg:mauve bg:blue)[ −$deleted ]($deleted_style)[](fg:blue bg:peach))"
+added_style = "fg:base bg:mauve bold"
+deleted_style = "fg:base bg:blue bold"
+
+[git_status]
+disabled = false
+style = "bg:peach fg:base bold"
+format = "([$all_status$ahead_behind ]($style))"
+conflicted = "[ ✘](fg:red bg:peach bold)"
+ahead = "[ ⇡${count}](fg:base bg:peach bold)"
+behind = "[ ⇣${count}](fg:base bg:peach bold)"
+diverged = "[ ⇕⇡${ahead_count} ⇣${behind_count}](fg:red bg:peach bold)"
+up_to_date = "[ ✓](fg:base bg:peach bold)"
+untracked = "[ ?](fg:sky bg:peach bold)"
+stashed = "[ ≡](fg:lavender bg:peach bold)"
+modified = "[ !](fg:base bg:peach bold)"
+staged = "[ +](fg:green bg:peach bold)"
+renamed = "[ »](fg:blue bg:peach bold)"
+deleted = "[ ✘](fg:red bg:peach bold)"
+
+# ────────────────────────────────────────────────
+# PROMPT CHARACTER · MODE / SUCCESS / ERROR
+# ────────────────────────────────────────────────
+
+[character]
+disabled = false
+success_symbol = "[❯](bold fg:green)"
+error_symbol = "[❯](bold fg:red)"
+vimcmd_symbol = "[❮](bold fg:teal)"
+vimcmd_replace_one_symbol = "[❮](bold fg:lavender)"
+vimcmd_replace_symbol = "[❮](bold fg:mauve)"
+vimcmd_visual_symbol = "[❮](bold fg:yellow)"
+
+# ────────────────────────────────────────────────
+# LANGUAGE RUNTIMES · SUBTLE COLOR CODING
+# ────────────────────────────────────────────────
+
+[c]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:blue bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[rust]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:peach bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[golang]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:sky bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[nodejs]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:green bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[bun]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:peach bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[php]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:lavender bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[java]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:peach bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[kotlin]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:mauve bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[haskell]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:blue bg:surface0)[ $version ](fg:text bg:surface0)"
+
+[python]
+symbol = ""
+style = "bg:surface0"
+# Environment name is handled by custom.venv to avoid duplication.
+format = "[ $symbol](fg:green bg:surface0)[ $version ](fg:text bg:surface0)"
+python_binary = ["python", "python3", "python2"]
+
+# ────────────────────────────────────────────────
+# PYTHON ENVIRONMENT · ACTIVE VENV ONLY
+# ────────────────────────────────────────────────
+
+[custom.venv]
+description = "Active Python virtual environment"
+command = 'printf " %s" "${VIRTUAL_ENV##*/}"'
+when = 'test -n "$VIRTUAL_ENV"'
+format = "[ $output ](fg:green bg:surface0)"
+shell = ["bash", "--noprofile", "--norc"]
+
+[conda]
+symbol = "󰌠"
+style = "fg:sky bg:surface0"
+format = "[ $symbol $environment ]($style)"
+ignore_base = true
+truncation_length = 20
+truncation_symbol = "…"
+
+# ────────────────────────────────────────────────
+# DOCKER · COOL BLUE
+# ────────────────────────────────────────────────
+
+[docker_context]
+symbol = ""
+style = "bg:surface0"
+format = "[ $symbol](fg:sky bg:surface0)[ $context ](fg:text bg:surface0)"
+only_with_files = true
+disabled = false
+
+# ────────────────────────────────────────────────
+# SHELL SCRIPT DETECTION
+# ────────────────────────────────────────────────
+
+[custom.shell]
+description = "Shell script indicator"
+command = 'printf " SH"'
+when = 'find . -maxdepth 1 -name "*.sh" -print -quit | grep -q .'
+format = "[ $output ](fg:yellow bg:surface0)"
+shell = ["bash", "--noprofile", "--norc"]
+
+# ────────────────────────────────────────────────
+# HUGO · STATIC SITE PROJECT DETECTION
+# ────────────────────────────────────────────────
+
+[custom.hugo]
+description = "Hugo static site generator"
+command = 'hugo version | sed -E "s/^hugo v([^ ]+).*/v\1/"'
+when = 'command -v hugo >/dev/null 2>&1 && { test -f hugo.toml || test -f hugo.yaml || test -f hugo.yml || test -f hugo.json || test -f config.toml || test -f config.yaml || test -f config.yml || test -f config.json || test -d config/_default; }'
+format = '[ 󰗀 Hugo $output ](fg:peach bg:surface0)'
+shell = ["bash", "--noprofile", "--norc"]
+
+# ────────────────────────────────────────────────
+# SSH · LAVENDER
+# ────────────────────────────────────────────────
+
+[localip]
+ssh_only = true
+format = "[ 󰒋 $localipv4 ](fg:lavender bg:surface0)"
+disabled = false
+
+# ────────────────────────────────────────────────
+# COMMAND DURATION · WARM PEACH
+# ────────────────────────────────────────────────
+
+[cmd_duration]
+min_time = 1000
+min_time_to_notify = 60000
+show_milliseconds = false
+show_notifications = true
+format = "[ 󱎫 $duration ](fg:peach bg:surface0)"
+style = "bg:surface0"
+disabled = false
+
+# ────────────────────────────────────────────────
+# CLOCK · MINIMAL / 24-HOUR
+# ────────────────────────────────────────────────
+
+[time]
+disabled = false
+format = "[  $time ](fg:subtext1 bg:surface0)"
+time_format = "%H:%M"
+style = "bg:surface0"
+utc_time_offset = "local"
+
+# ────────────────────────────────────────────────
+# CATPPUCCIN MOCHA · CUSTOM PALETTE
+# ────────────────────────────────────────────────
+
+[palettes.catppuccin_mocha]
+rosewater = "#f5e0dc"
+flamingo = "#f2cdcd"
+pink = "#f5c2e7"
+mauve = "#cba6f7"
+orange = "#cba6f7"
+red = "#f38ba8"
+maroon = "#eba0ac"
+peach = "#fab387"
+yellow = "#f9e2af"
+green = "#a6e3a1"
+teal = "#94e2d5"
+sky = "#89dceb"
+sapphire = "#74c7ec"
+blue = "#89b4fa"
+lavender = "#b4befe"
+text = "#cdd6f4"
+subtext1 = "#bac2de"
+subtext0 = "#a6adc8"
+overlay2 = "#9399b2"
+overlay1 = "#7f849c"
+overlay0 = "#6c7086"
+surface2 = "#585b70"
+surface1 = "#45475a"
+surface0 = "#313244"
+base = "#1e1e2e"
+mantle = "#181825"
+crust = "#11111b"
