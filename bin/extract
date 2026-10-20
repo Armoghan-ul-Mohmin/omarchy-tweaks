@@ -1,0 +1,285 @@
+#!/usr/bin/env bash
+
+##############################################
+#              Extract Archives              #
+##############################################
+# Usage:                                     #
+#       ./extract [archive]                  #
+#       ./extract                            #
+#                                            #
+#  Requirments:                              #
+#      - gum                                 #
+#      - fzf                                 #
+#      - tar                                 #
+#      - unzip                               #
+#      - 7z                                  #
+#      - unrar                               #
+#      - gzip                                #
+#      - bzip2                               #
+#      - xz                                  #
+#      - zstd                                #
+##############################################
+
+set -o pipefail
+
+# Nerd Font icons
+ICON_ARCHIVE="󰛫"
+ICON_EXTRACT="󰆏"
+ICON_SUCCESS="󰄬"
+ICON_ERROR="󰅖"
+ICON_INFO="󰋼"
+
+# Check required UI dependency
+if ! command -v gum >/dev/null 2>&1; then
+    printf 'Error: gum is not installed.\n' >&2
+    exit 1
+fi
+
+# Select an archive when no argument is provided
+if [[ $# -eq 0 ]]; then
+    archives=()
+
+    while IFS= read -r -d '' file; do
+        archives+=("$file")
+    done < <(
+        find . -maxdepth 1 -type f \
+            \( -iname '*.zip' \
+            -o -iname '*.tar' \
+            -o -iname '*.tar.gz' \
+            -o -iname '*.tgz' \
+            -o -iname '*.tar.bz2' \
+            -o -iname '*.tbz2' \
+            -o -iname '*.tar.xz' \
+            -o -iname '*.txz' \
+            -o -iname '*.tar.zst' \
+            -o -iname '*.tzst' \
+            -o -iname '*.gz' \
+            -o -iname '*.bz2' \
+            -o -iname '*.xz' \
+            -o -iname '*.zst' \
+            -o -iname '*.7z' \
+            -o -iname '*.rar' \
+            -o -iname '*.war' \
+            -o -iname '*.jar' \
+            -o -iname '*.cbz' \
+            -o -iname '*.cbr' \) \
+            -print0
+    )
+
+    case "${#archives[@]}" in
+        0)
+            gum style --foreground 214 \
+                "${ICON_ERROR} No archives found in the current directory."
+            exit 1
+            ;;
+        1)
+            archive="${archives[0]}"
+            ;;
+        *)
+            if ! command -v fzf >/dev/null 2>&1; then
+                gum style --foreground 196 \
+                    "${ICON_ERROR} fzf is required to select an archive."
+                exit 1
+            fi
+
+            archive=$(
+                printf '%s\n' "${archives[@]}" |
+                    fzf \
+                        --height '60%' \
+                        --layout reverse \
+                        --border rounded \
+                        --prompt "${ICON_ARCHIVE} Select archive > " \
+                        --pointer '󰜴' \
+                        --marker '󰄬' \
+                        --no-multi \
+                        --preview 'file --brief -- {} 2>/dev/null' \
+                        --preview-window 'down:3:wrap' \
+                        --bind 'ctrl-c:abort'
+            ) || {
+                gum style --foreground 214 \
+                    "${ICON_INFO} Selection cancelled."
+                exit 0
+            }
+            ;;
+    esac
+else
+    archive=$1
+fi
+
+# Validate the archive path
+if [[ ! -f "$archive" ]]; then
+    gum style --foreground 196 \
+        "${ICON_ERROR} Archive not found: $archive"
+    exit 1
+fi
+
+# Get a clean display name
+display_archive="${archive##*/}"
+
+# Determine archive format
+case "${archive,,}" in
+    *.tar.gz|*.tgz|*.tar.bz2|*.tbz2|*.tar.xz|*.txz|*.tar.zst|*.tzst|*.tar)
+        format="tar"
+        ;;
+    *.zip|*.war|*.jar|*.cbz)
+        format="zip"
+        ;;
+    *.7z)
+        format="7z"
+        ;;
+    *.rar|*.cbr)
+        format="rar"
+        ;;
+    *.gz)
+        format="gz"
+        ;;
+    *.bz2)
+        format="bz2"
+        ;;
+    *.xz)
+        format="xz"
+        ;;
+    *.zst)
+        format="zst"
+        ;;
+    *)
+        gum style --foreground 196 \
+            "${ICON_ERROR} Unsupported archive format: $display_archive"
+        exit 1
+        ;;
+esac
+
+# Validate the archive and check required utilities
+case "$format" in
+    tar)
+        if ! command -v tar >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} tar is not installed."
+            exit 1
+        fi
+
+        if ! tar -tf "$archive" >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} Invalid or unreadable archive."
+            exit 1
+        fi
+        ;;
+    zip)
+        if ! command -v unzip >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} unzip is not installed."
+            exit 1
+        fi
+
+        if ! unzip -t "$archive" >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} Invalid or unreadable archive."
+            exit 1
+        fi
+        ;;
+    7z)
+        if ! command -v 7z >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} 7z is not installed."
+            exit 1
+        fi
+
+        if ! 7z t "$archive" >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} Invalid or unreadable archive."
+            exit 1
+        fi
+        ;;
+    rar)
+        if ! command -v unrar >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} unrar is not installed."
+            exit 1
+        fi
+
+        if ! unrar t "$archive" >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} Invalid or unreadable archive."
+            exit 1
+        fi
+        ;;
+    gz)
+        if ! command -v gzip >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} gzip is not installed."
+            exit 1
+        fi
+
+        if ! gzip -t "$archive" 2>/dev/null; then
+            gum style --foreground 196 "${ICON_ERROR} Invalid gzip file."
+            exit 1
+        fi
+        ;;
+    bz2)
+        if ! command -v bzip2 >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} bzip2 is not installed."
+            exit 1
+        fi
+
+        if ! bzip2 -t "$archive" 2>/dev/null; then
+            gum style --foreground 196 "${ICON_ERROR} Invalid bzip2 file."
+            exit 1
+        fi
+        ;;
+    xz)
+        if ! command -v xz >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} xz is not installed."
+            exit 1
+        fi
+
+        if ! xz -t "$archive" 2>/dev/null; then
+            gum style --foreground 196 "${ICON_ERROR} Invalid xz file."
+            exit 1
+        fi
+        ;;
+    zst)
+        if ! command -v zstd >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} zstd is not installed."
+            exit 1
+        fi
+
+        if ! zstd -t "$archive" >/dev/null 2>&1; then
+            gum style --foreground 196 "${ICON_ERROR} Invalid zstd file."
+            exit 1
+        fi
+        ;;
+esac
+
+# Display archive information without boxes
+gum style --foreground 39 \
+    "${ICON_ARCHIVE} Archive: $display_archive"
+
+gum style --foreground 245 \
+    "${ICON_INFO} Destination: $PWD"
+
+# Ask for confirmation
+if ! gum confirm "${ICON_EXTRACT} Extract this archive here?"; then
+    gum style --foreground 214 \
+        "${ICON_INFO} Extraction cancelled."
+    exit 0
+fi
+
+# Extract without an interactive spinner
+gum style --foreground 39 \
+    "${ICON_EXTRACT} Extracting $display_archive..."
+
+if bash -c '
+    archive=$1
+    format=$2
+
+    case "$format" in
+        tar) tar -xf "$archive" ;;
+        zip) unzip -o "$archive" ;;
+        7z)  7z x -y "$archive" ;;
+        rar) unrar x -o+ "$archive" ;;
+        gz)  gzip -dk "$archive" ;;
+        bz2) bzip2 -dk "$archive" ;;
+        xz)  xz -dk "$archive" ;;
+        zst) zstd -dk "$archive" ;;
+        *)   exit 1 ;;
+    esac
+' bash "$archive" "$format"
+then
+    gum style --foreground 46 \
+        "${ICON_SUCCESS} Archive extracted successfully: $display_archive"
+else
+    gum style --foreground 196 \
+        "${ICON_ERROR} Extraction failed: $display_archive"
+    exit 1
+fi

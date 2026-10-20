@@ -1,26 +1,310 @@
 #!/usr/bin/env bash
 
-if [ -z "$1" ]; then
-    echo "Usage: compress <file_or_directory>"
-    return 1
+##############################################
+#             Compress Archives              #
+##############################################
+# Usage:                                     #
+#       ./compress file1.txt folder1         #
+#       ./compress                           #
+#                                            #
+#  Requirments:                              #
+#      - gum                                 #
+#      - fzf                                 #
+#      - tar                                 #
+#      - unzip                               #
+#      - 7z                                  #
+#      - unrar                               #
+#      - gzip                                #
+#      - bzip2                               #
+#      - xz                                  #
+#      - zstd                                #
+##############################################
+
+set -o pipefail
+
+# Nerd Font icons
+ICON_FILE="󰈔"
+ICON_FOLDER="󰉋"
+ICON_ARCHIVE="󰛫"
+ICON_COMPRESS="󰆏"
+ICON_SUCCESS="󰄬"
+ICON_ERROR="󰅖"
+ICON_INFO="󰋼"
+
+# Check required UI dependency
+if ! command -v gum >/dev/null 2>&1; then
+    printf 'Error: gum is not installed.\n' >&2
+    exit 1
 fi
 
-if [ ! -e "$1" ]; then
-    echo "'$1' is not a valid file or directory"
-    return 1
+# Select files and folders if no arguments are provided
+if [[ $# -eq 0 ]]; then
+    if ! command -v fzf >/dev/null 2>&1; then
+        gum style --foreground 196 \
+            "${ICON_ERROR} fzf is required for interactive selection."
+        exit 1
+    fi
+
+    entries=()
+
+    while IFS= read -r -d '' entry; do
+        entries+=("$entry")
+    done < <(
+        find . -mindepth 1 -maxdepth 1 \
+            ! -name '.' \
+            -print0
+    )
+
+    if [[ ${#entries[@]} -eq 0 ]]; then
+        gum style --foreground 214 \
+            "${ICON_ERROR} No files or folders found in the current directory."
+        exit 1
+    fi
+
+    selected=()
+
+    while IFS= read -r -d '' entry; do
+        selected+=("$entry")
+    done < <(
+        printf '%s\0' "${entries[@]}" |
+            fzf \
+                --read0 \
+                --print0 \
+                --multi \
+                --layout reverse \
+                --height '70%' \
+                --border rounded \
+                --prompt "${ICON_COMPRESS} Select files/folders > " \
+                --pointer '󰜴' \
+                --marker '󰄬' \
+                --preview 'if [[ -d {} ]]; then ls -la --color=always -- {}; else file --brief -- {}; fi' \
+                --preview-window 'right:50%:wrap' \
+                --bind 'ctrl-a:select-all' \
+                --bind 'ctrl-d:deselect-all' \
+                --bind 'ctrl-c:abort'
+    )
+
+    if [[ ${#selected[@]} -eq 0 ]]; then
+        gum style --foreground 214 \
+            "${ICON_INFO} Selection cancelled or no items selected."
+        exit 0
+    fi
+else
+    selected=("$@")
 fi
 
-format=$(printf "\ntar.gz\ntar.bz2\nzip\n7z\nbz2\nrar\ntar.xz\ntgz\n" | \
-    fzf --header="Select compression format:" --height=50% --reverse --border --prompt='🔍 ')
+# Validate selected paths
+for entry in "${selected[@]}"; do
+    if [[ ! -e "$entry" && ! -L "$entry" ]]; then
+        gum style --foreground 196 \
+            "${ICON_ERROR} Path not found: $entry"
+        exit 1
+    fi
+
+    if [[ -L "$entry" ]]; then
+        gum style --foreground 214 \
+            "${ICON_INFO} Symbolic link selected: $entry"
+    fi
+done
+
+# Choose archive format
+format_choice=$(
+    gum choose \
+        --header "${ICON_ARCHIVE} Choose archive format" \
+        "tar       - Uncompressed TAR" \
+        "tar.gz    - Gzip compressed TAR" \
+        "tar.bz2  - Bzip2 compressed TAR" \
+        "tar.xz    - XZ compressed TAR" \
+        "tar.zst   - Zstandard compressed TAR" \
+        "zip       - ZIP archive" \
+        "7z        - 7-Zip archive"
+) || {
+    gum style --foreground 214 \
+        "${ICON_INFO} Compression cancelled."
+    exit 0
+}
+
+format="${format_choice%% *}"
+
+# Determine extension and required utilities
+case "$format" in
+    tar)
+        extension="tar"
+        required="tar"
+        ;;
+    tar.gz)
+        extension="tar.gz"
+        required="tar"
+        ;;
+    tar.bz2)
+        extension="tar.bz2"
+        required="tar"
+        ;;
+    tar.xz)
+        extension="tar.xz"
+        required="tar"
+        ;;
+    tar.zst)
+        extension="tar.zst"
+        required="tar"
+        ;;
+    zip)
+        extension="zip"
+        required="zip"
+        ;;
+    7z)
+        extension="7z"
+        required="7z"
+        ;;
+    *)
+        gum style --foreground 196 \
+            "${ICON_ERROR} Unsupported format."
+        exit 1
+        ;;
+esac
+
+# Check required commands
+if ! command -v "$required" >/dev/null 2>&1; then
+    gum style --foreground 196 \
+        "${ICON_ERROR} Required utility '$required' is not installed."
+    exit 1
+fi
 
 case "$format" in
-    tar.gz)  tar czf "$1.tar.gz" "$1" ;;
-    tar.bz2) tar cjf "$1.tar.bz2" "$1" ;;
-    zip)     zip -r "$1.zip" "$1" ;;
-    7z)      7z a "$1.7z" "$1" ;;
-    bz2)     bunzip2 "$1" ;;
-    rar)     rar a "$1.rar" "$1" ;;
-    tar.xz)  tar cJf "$1.tar.xz" "$1" ;;
-    tgz)     tar czf "$1.tgz" "$1" ;;
-    *)       echo "No valid format selected" ;;
+    tar.gz)
+        command -v gzip >/dev/null 2>&1 || {
+            gum style --foreground 196 "${ICON_ERROR} gzip is not installed."
+            exit 1
+        }
+        ;;
+    tar.bz2)
+        command -v bzip2 >/dev/null 2>&1 || {
+            gum style --foreground 196 "${ICON_ERROR} bzip2 is not installed."
+            exit 1
+        }
+        ;;
+    tar.xz)
+        command -v xz >/dev/null 2>&1 || {
+            gum style --foreground 196 "${ICON_ERROR} xz is not installed."
+            exit 1
+        }
+        ;;
+    tar.zst)
+        command -v zstd >/dev/null 2>&1 || {
+            gum style --foreground 196 "${ICON_ERROR} zstd is not installed."
+            exit 1
+        }
+        ;;
 esac
+
+# Enter archive name
+archive_name=$(
+    gum input \
+        --prompt "${ICON_ARCHIVE} Archive name: " \
+        --placeholder "archive" \
+        --value "archive"
+) || {
+    gum style --foreground 214 \
+        "${ICON_INFO} Compression cancelled."
+    exit 0
+}
+
+if [[ -z "$archive_name" ]]; then
+    gum style --foreground 196 \
+        "${ICON_ERROR} Archive name cannot be empty."
+    exit 1
+fi
+
+# Append the extension unless already present
+if [[ "${archive_name,,}" == *".${extension}" ]]; then
+    archive="$archive_name"
+else
+    archive="${archive_name}.${extension}"
+fi
+
+# Prevent accidental self-inclusion
+for entry in "${selected[@]}"; do
+    if [[ "$entry" == "$archive" || "$entry" == "./$archive" ]]; then
+        gum style --foreground 196 \
+            "${ICON_ERROR} The output archive cannot also be an input."
+        exit 1
+    fi
+done
+
+# Prevent overwriting without confirmation
+if [[ -e "$archive" || -L "$archive" ]]; then
+    gum style --foreground 214 \
+        "${ICON_INFO} Archive already exists: $archive"
+
+    if ! gum confirm "Overwrite existing archive?"; then
+        gum style --foreground 214 \
+            "${ICON_INFO} Compression cancelled."
+        exit 0
+    fi
+fi
+
+# Display summary
+gum style --foreground 39 \
+    "${ICON_COMPRESS} Format: $format"
+
+gum style --foreground 39 \
+    "${ICON_ARCHIVE} Output: $archive"
+
+gum style --foreground 245 \
+    "${ICON_INFO} Items selected: ${#selected[@]}"
+
+for entry in "${selected[@]}"; do
+    gum style --foreground 245 "  ${ICON_FILE} ${entry#./}"
+done
+
+# Confirm compression
+if ! gum confirm "${ICON_COMPRESS} Create archive?"; then
+    gum style --foreground 214 \
+        "${ICON_INFO} Compression cancelled."
+    exit 0
+fi
+
+# Create archive without gum spin
+gum style --foreground 39 \
+    "${ICON_COMPRESS} Compressing files..."
+
+case "$format" in
+    tar)
+        tar -cf "$archive" -- "${selected[@]}"
+        status=$?
+        ;;
+    tar.gz)
+        tar -czf "$archive" -- "${selected[@]}"
+        status=$?
+        ;;
+    tar.bz2)
+        tar -cjf "$archive" -- "${selected[@]}"
+        status=$?
+        ;;
+    tar.xz)
+        tar -cJf "$archive" -- "${selected[@]}"
+        status=$?
+        ;;
+    tar.zst)
+        tar --zstd -cf "$archive" -- "${selected[@]}"
+        status=$?
+        ;;
+    zip)
+        zip -r "$archive" "${selected[@]}"
+        status=$?
+        ;;
+    7z)
+        7z a "$archive" "${selected[@]}"
+        status=$?
+        ;;
+esac
+
+# Report result
+if [[ $status -eq 0 ]]; then
+    gum style --foreground 46 \
+        "${ICON_SUCCESS} Archive created successfully: $archive"
+else
+    gum style --foreground 196 \
+        "${ICON_ERROR} Compression failed: $archive"
+    exit 1
+fi
