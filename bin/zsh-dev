@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Launch an interactive zsh using this repo's dotfiles/zsh as ZDOTDIR,
+# so you can test your .zshrc without touching ~/.zshrc.
+
+set -euo pipefail
+
+SELF="$(readlink -f -- "${BASH_SOURCE[0]}")"
+REPO_DIR="$(cd -- "$(dirname -- "$SELF")/.." && pwd)"
+export ZDOTDIR="$REPO_DIR/dotfiles/zsh"
+
+exec zsh -i "$@"

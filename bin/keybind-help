@@ -60,13 +60,14 @@ Alt+S          │  SuperFiles            │  󰉋 spf
 Alt+T          │  Tmux Manager          │   tij
 Alt+Z          │  Zellij Manager        │   zij
 Alt+? / Alt+/  │  Keybind Helper        │  󰌌 keybind-help
+?              │  Atuin AI Inline       │  󰚩 atuin ai
 EOF
 )
 
- gum style \
-  --foreground "$PINK" \
-  --bold \
-  '󰀻  CUSTOM SHORTCUTS'
+gum style \
+    --foreground "$PINK" \
+    --bold \
+    '󰀻  CUSTOM SHORTCUTS'
 
 gum style \
     --foreground "$WHITE" \
@@ -106,7 +107,7 @@ Alt+C        │  Find Directory
 EOF
 )
 
-  gum style \
+gum style \
     --foreground "$CYAN" \
     --bold \
     '󰆍  ZSH DEFAULTS'
@@ -127,6 +128,8 @@ FZF=$(cat <<'EOF'
 Ctrl+Alt+F    │  File / Directory Picker   │  󰈞 fzf + fd
 Ctrl+Alt+L    │  Git Log Search            │  󰊢 fzf + git
 Ctrl+Alt+V    │  Shell Variables           │  󰘳 fzf Variables
+Ctrl+Alt+B    │  Git Branches              │  󰊢 fzf + git
+Ctrl+Z        │  Zoxide Jump               │  󰉋 zoxide
 ** + Tab      │  FZF Completion            │  󰜎 fuzzy completion
 Tab           │  Zsh Completion            │  󰆍 standard completion
 Shift+Tab     │  Previous Completion       │  󰌑 reverse selection
