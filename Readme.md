@@ -121,7 +121,7 @@ See [`dotfiles/zsh/README.md`](dotfiles/zsh/README.md) for details.
 | Script | Purpose |
 |--------|---------|
 | `compress` / `extract` | Archive helpers for many formats |
-| `hastebin` | Upload text/files to a hastebin |
+| `hastebin` | Beautiful pste.us uploader with title/language/expiry/burn, secret scanning & safety guards |
 | `lzj` | "lazy zellij" — fzf-based zellij session manager (local + remote) |
 | `tij` | tmux session manager |
 | `server` | Start a local dev server (node, npm, hugo, python, uv, php, mkdocs) |

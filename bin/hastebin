@@ -5,89 +5,408 @@ set -o pipefail
 # ============================================================
 #                         HASTEBIN
 # ============================================================
+# Share text & code to pste.us with a beautiful TUI.
+#
+# Defaults (overridable by flags or `-i`):
+#   * unlisted   (link only, never in /recent)
+#   * expires 1d (24 hours)
+#   * burn after 5 views
+#   * secret scanning + sensitive-path blocking
+# ============================================================
 
-UPLOAD_URL="https://pste.us/documents"
 BASE_URL="https://pste.us"
+CREATE_URL="$BASE_URL/pastes"
+HISTORY_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/hastebin/history.tsv"
+
+# ------------------------------------------------------------
+# Defaults  (change here to re-tune the whole script)
+# ------------------------------------------------------------
+
+DEF_EXPIRES="1d"
+DEF_VISIBILITY="1"     # 1 = unlisted (safe), 0 = public
+DEF_BURN="5"
+MAX_BYTES=$(( 10 * 1024 * 1024 ))
+WARN_BYTES=$(( 1 * 1024 * 1024 ))
 
 # ------------------------------------------------------------
 # Colors
 # ------------------------------------------------------------
 
-BLUE="\033[38;2;137;180;250m"
-CYAN="\033[38;2;137;220;235m"
-GREEN="\033[38;2;166;227;161m"
-MAUVE="\033[38;2;203;166;247m"
-RED="\033[38;2;243;139;168m"
-YELLOW="\033[38;2;249;226;175m"
-TEXT="\033[38;2;205;214;244m"
-SUBTEXT="\033[38;2;166;173;200m"
-DIM="\033[38;2;108;112;134m"
-RESET="\033[0m"
+BLUE=$'\033[38;2;137;180;250m'
+CYAN=$'\033[38;2;137;220;235m'
+GREEN=$'\033[38;2;166;227;161m'
+MAUVE=$'\033[38;2;203;166;247m'
+RED=$'\033[38;2;243;139;168m'
+YELLOW=$'\033[38;2;249;226;175m'
+PEACH=$'\033[38;2;250;179;135m'
+TEXT=$'\033[38;2;205;214;244m'
+SUBTEXT=$'\033[38;2;166;173;200m'
+DIM=$'\033[38;2;108;112;134m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
+
+W=56                   # inner width of framed blocks
 
 TMP_RESPONSE=""
 TMP_PROGRESS=""
+TMP_COOKIES=""
+TMP_RESPONSE_CODE=""
+TMP_CONTENT=""
+SPINNER_PID=""
 
 # ------------------------------------------------------------
 # Cleanup
 # ------------------------------------------------------------
 
 cleanup() {
-    [[ -n "$TMP_RESPONSE" && -f "$TMP_RESPONSE" ]] && rm -f "$TMP_RESPONSE"
-    [[ -n "$TMP_PROGRESS" && -f "$TMP_PROGRESS" ]] && rm -f "$TMP_PROGRESS"
+    [[ -n "$SPINNER_PID" ]] && kill "$SPINNER_PID" 2>/dev/null
+    local f
+    for f in "$TMP_RESPONSE" "$TMP_PROGRESS" "$TMP_COOKIES" "$TMP_RESPONSE_CODE" "$TMP_CONTENT"; do
+        [[ -n "$f" && -f "$f" ]] && rm -f "$f"
+    done
 }
 
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 # ------------------------------------------------------------
-# Error
+# Output helpers
 # ------------------------------------------------------------
 
 die() {
     echo
-    printf "  ${RED}✗${RESET} ${TEXT}%s${RESET}\n" "$1"
+    printf "  ${RED}✗${RESET}  ${BOLD}${TEXT}%s${RESET}\n" "$1"
+    [[ -n "${2:-}" ]] && printf "     ${DIM}%s${RESET}\n" "$2"
     echo
     exit 1
 }
+
+warn()  { printf "  ${YELLOW}⚠${RESET}   ${TEXT}%s${RESET}\n" "$1"; }
+ok()    { printf "  ${GREEN}✓${RESET}   ${TEXT}%s${RESET}\n" "$1"; }
+info()  { printf "  ${BLUE}󰋼${RESET}  ${SUBTEXT}%s${RESET}\n" "$1"; }
+
+rule()  { printf "  ${DIM}%s${RESET}\n" "$(printf '─%.0s' $(seq 1 "$W"))"; }
+
+# label  value  (aligned two-column row)
+# If the value already contains ANSI codes it is printed verbatim.
+kv() {
+    if [[ "$2" == *$'\033'* ]]; then
+        printf "  ${DIM}%-7s${RESET} %s\n" "$1" "$2"
+    else
+        printf "  ${DIM}%-7s${RESET} ${SUBTEXT}%s${RESET}\n" "$1" "$2"
+    fi
+}
+
+# Supported languages (mirror of the pste.us create form)
+SUPPORTED_LANGUAGES=(
+    text bash c cpp csharp css go html java javascript json kotlin
+    markdown php powershell python ruby rust sql swift toml typescript xml yaml
+)
+
+EXPIRY_VALUES=(1h 1d 1w 1m 3m 6m 1y 2y never)
+
+# ------------------------------------------------------------
+# Help
+# ------------------------------------------------------------
+
+usage() {
+    clear
+    echo
+    gum style \
+        --border rounded --border-foreground 212 --margin "0 2" --padding "0 2" \
+        --foreground 212 --bold "󰒿  HASTEBIN" 2>/dev/null || \
+        printf "  ${MAUVE}${BOLD}󰒿  HASTEBIN${RESET}\n"
+    echo
+    printf "  ${SUBTEXT}Share text & code to ${BLUE}pste.us${SUBTEXT} from the terminal.${RESET}\n"
+    printf "  ${DIM}Sends privately (unlisted) and self-destructs by default.${RESET}\n"
+    echo
+    rule
+    printf "  ${MAUVE}${BOLD}USAGE${RESET}\n"
+    echo
+    printf "  ${GREEN}hastebin${RESET} ${DIM}────────────────────${RESET}  ${SUBTEXT}pick a file interactively${RESET}\n"
+    printf "  ${GREEN}hastebin${RESET} ${CYAN}<file>${RESET} ${DIM}[options]${RESET}     ${SUBTEXT}upload a file${RESET}\n"
+    printf "  ${GREEN}hastebin${RESET} ${CYAN}-${RESET} ${DIM}[options]${RESET}           ${SUBTEXT}read from stdin${RESET}\n"
+    printf "  ${GREEN}cat x | hastebin${RESET} ${CYAN}-${RESET}          ${SUBTEXT}upload piped input${RESET}\n"
+    echo
+    rule
+    printf "  ${MAUVE}${BOLD}OPTIONS${RESET}\n"
+    echo
+    printf "  ${CYAN}-t${RESET}, ${CYAN}--title${RESET} ${DIM}<text>${RESET}      ${SUBTEXT}paste title ${DIM}(default: filename)${RESET}\n"
+    printf "  ${CYAN}-l${RESET}, ${CYAN}--language${RESET} ${DIM}<lang>${RESET}   ${SUBTEXT}syntax highlight ${DIM}(default: auto-detected)${RESET}\n"
+    printf "  ${CYAN}-e${RESET}, ${CYAN}--expires${RESET} ${DIM}<when>${RESET}    ${SUBTEXT}${DIM}${EXPIRY_VALUES[*]} | <seconds>${RESET}\n"
+    printf "  ${CYAN}-u${RESET}, ${CYAN}--unlisted${RESET}          ${SUBTEXT}link only ${GREEN}(default)${RESET}\n"
+    printf "  ${CYAN}-p${RESET}, ${CYAN}--public${RESET}            ${SUBTEXT}harsh: listed in /recent ${YELLOW}!${RESET}\n"
+    printf "  ${CYAN}-b${RESET}, ${CYAN}--burn${RESET} ${DIM}<n>${RESET}          ${SUBTEXT}burn after n views ${DIM}(default: ${DEF_BURN})${RESET}\n"
+    printf "  ${CYAN}-i${RESET}, ${CYAN}--interactive${RESET}       ${SUBTEXT}tune every option with prompts${RESET}\n"
+    printf "  ${CYAN}-y${RESET}, ${CYAN}--yes${RESET}               ${SUBTEXT}skip the confirmation prompt${RESET}\n"
+    printf "  ${CYAN}-f${RESET}, ${CYAN}--force${RESET}             ${SUBTEXT}upload even if secrets/sensitive paths found${RESET}\n"
+    printf "  ${CYAN}-c${RESET}, ${CYAN}--no-copy${RESET}           ${SUBTEXT}do not copy the URL to the clipboard${RESET}\n"
+    printf "  ${CYAN}-q${RESET}, ${CYAN}--no-qr${RESET}             ${SUBTEXT}do not render a QR code${RESET}\n"
+    printf "  ${CYAN}-n${RESET}, ${CYAN}--dry-run${RESET}           ${SUBTEXT}scan & preview, never upload${RESET}\n"
+    echo
+    rule
+    printf "  ${MAUVE}${BOLD}META${RESET}\n"
+    echo
+    printf "  ${CYAN}-h${RESET}, ${CYAN}--help${RESET}              ${SUBTEXT}show this help${RESET}\n"
+    printf "      ${CYAN}--languages${RESET}         ${SUBTEXT}list supported languages${RESET}\n"
+    printf "      ${CYAN}--history${RESET}           ${SUBTEXT}show recent uploads${RESET}\n"
+    printf "      ${CYAN}--version${RESET}           ${SUBTEXT}show version${RESET}\n"
+    echo
+    rule
+    printf "  ${MAUVE}${BOLD}SAFETY${RESET}\n"
+    echo
+    info "Every paste is unlisted and auto-expires — but treat it as PUBLIC."
+    info "Known secret patterns and sensitive filenames are blocked by default."
+    printf "  ${BLUE}󰋼${RESET}  ${SUBTEXT}Bypass a block with ${YELLOW}--force${SUBTEXT} after reviewing the warning.${RESET}\n"
+    echo
+    rule
+    printf "  ${MAUVE}${BOLD}EXAMPLES${RESET}\n"
+    echo
+    printf "  ${GREEN}\$${RESET} hastebin script.sh\n"
+    printf "  ${GREEN}\$${RESET} hastebin notes.md -t \"Meeting notes\" -e 1w\n"
+    printf "  ${GREEN}\$${RESET} hastebin config.yaml -l yaml -p\n"
+    printf "  ${GREEN}\$${RESET} nmap -p- host | hastebin - -t \"nmap scan\" -b 1\n"
+    printf "  ${GREEN}\$${RESET} hastebin secrets.env -f    ${DIM}# force past the guard${RESET}\n"
+    echo
+    exit 0
+}
+
+VERSION="2.0.0"
+
+show_version() {
+    printf "\n  ${MAUVE}${BOLD}%s${RESET} ${DIM}v%s${RESET}\n\n" "hastebin" "$VERSION"
+    exit 0
+}
+
+list_languages() {
+    printf '\n  %s %s\n\n' "${MAUVE}${BOLD}Supported languages${RESET}" "${DIM}(use with -l)${RESET}"
+    printf "    %s\n" "${SUPPORTED_LANGUAGES[*]}"
+    printf '\n'
+    exit 0
+}
+
+show_history() {
+    if [[ ! -s "$HISTORY_FILE" ]]; then
+        printf '\n'; warn "No upload history yet."; printf '\n'
+        exit 0
+    fi
+    printf '\n  %s %s\n\n' "${MAUVE}${BOLD}Recent uploads${RESET}" "${DIM}(newest last)${RESET}"
+    if command -v gum &>/dev/null; then
+        gum table --print --separator='  ' --file <(tail -n 25 "$HISTORY_FILE") 2>/dev/null || \
+            column -t -s $'\t' "$HISTORY_FILE"
+    else
+        column -t -s $'\t' "$HISTORY_FILE"
+    fi
+    printf '\n'
+    exit 0
+}
+
+# ------------------------------------------------------------
+# Enrichment helpers
+# ------------------------------------------------------------
+
+detect_language() {
+    local path="$1" ext
+    ext="${path##*.}"
+    ext="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
+
+    case "$ext" in
+        sh|bash|zsh|ksh|fish)  echo bash ;;
+        c|h)                   echo c ;;
+        cpp|cc|cxx|hpp)        echo cpp ;;
+        cs)                    echo csharp ;;
+        css|scss|sass|less)    echo css ;;
+        go)                    echo go ;;
+        html|htm)              echo html ;;
+        java)                  echo java ;;
+        js|mjs|cjs|jsx)        echo javascript ;;
+        ts|tsx)                echo typescript ;;
+        json|jsonc)            echo json ;;
+        kt|kts)                echo kotlin ;;
+        md|markdown)           echo markdown ;;
+        php)                   echo php ;;
+        ps1|psm1)              echo powershell ;;
+        py|pyw)                echo python ;;
+        rb)                    echo ruby ;;
+        rs)                    echo rust ;;
+        sql)                   echo sql ;;
+        swift)                 echo swift ;;
+        toml)                  echo toml ;;
+        xml|svg)               echo xml ;;
+        yml|yaml)              echo yaml ;;
+        *)                     echo text ;;
+    esac
+}
+
+# Pretty expiry label (1d -> "1 day", 3600 -> "3600s")
+expiry_label() {
+    case "$1" in
+        1h) echo "1 hour" ;;
+        1d) echo "24 hours" ;;
+        1w) echo "1 week" ;;
+        1m) echo "1 month" ;;
+        3m) echo "3 months" ;;
+        6m) echo "6 months" ;;
+        1y) echo "1 year" ;;
+        2y) echo "2 years" ;;
+        never) echo "never" ;;
+        *) echo "${1}s" ;;
+    esac
+}
+
+# ------------------------------------------------------------
+# SAFETY: sensitive paths
+# ------------------------------------------------------------
+
+# Glob-ish match against the basename / path
+SENSITIVE_NAMES=(
+    '.env' '*.env' '*.env.*' '.envrc'
+    'id_rsa' 'id_ed25519' 'id_ecdsa' 'id_dsa' 'id_rsa.pub'
+    '*.pem' '*.key' '*.p12' '*.pfx' '*.jks'
+    '.netrc' '.pgpass' '.my.cnf' '.htpasswd'
+    'credentials' 'credentials.json' 'service-account.json'
+    '.npmrc' '.pypirc' '.dockercfg' '.docker/config.json'
+    'known_hosts' 'authorized_keys'
+    '.git-credentials' '*secret*' '*passwd*' '*password*'
+)
+
+is_sensitive_path() {
+    local base="$1" name lower
+    base="$(basename -- "$1")"
+    lower="$(echo "$1$base" | tr '[:upper:]' '[:lower:]')"
+
+    # anything under .ssh / .gnupg / .aws
+    case "$1" in
+        */.ssh/*|*/.gnupg/*|*/.aws/*|*/.config/gh/*) return 0 ;;
+    esac
+
+    local pat
+    for pat in "${SENSITIVE_NAMES[@]}"; do
+        # shellcheck disable=SC2053
+        [[ "$base" == $pat || "$lower" == $pat ]] && return 0
+        # shellcheck disable=SC2053
+        [[ "${base,,}" == $pat ]] && return 0
+    done
+    return 1
+}
+
+# ------------------------------------------------------------
+# SAFETY: secret scanning
+# ------------------------------------------------------------
+
+# Prints one line per finding: "<line>:<type>"
+scan_secrets() {
+    local file="$1"
+    # Only scan textual-ish files, cap work on huge files
+    grep -nE \
+        -e 'AKIA[0-9A-Z]{16}'                                                  \
+        -e 'ASIA[0-9A-Z]{16}'                                                  \
+        -e 'AIza[0-9A-Za-z_-]{35}'                                             \
+        -e 'gh[pousr]_[0-9A-Za-z]{36,}'                                        \
+        -e 'github_pat_[0-9A-Za-z_]{22,}'                                      \
+        -e 'sk-[0-9A-Za-z]{20,}'                                               \
+        -e 'sk-ant-[0-9A-Za-z-]{20,}'                                          \
+        -e 'xox[baprs]-[0-9A-Za-z-]{10,}'                                      \
+        -e 'glpat-[0-9A-Za-z_-]{20,}'                                          \
+        -e 'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'     \
+        -e '-----BEGIN [A-Z ]*PRIVATE KEY-----'                                \
+        -e '(secret|token|passwd|password|api[_-]?key|apikey|access[_-]?key)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_-]{12,}' \
+        -e '(SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY)[[:space:]]*=[[:space:]]*[A-Za-z0-9/+_-]{12,}' \
+        "$file" 2>/dev/null | head -n 40
+}
+
+# ------------------------------------------------------------
+# Options / defaults
+# ------------------------------------------------------------
+
+TITLE=""
+LANGUAGE=""
+EXPIRES="$DEF_EXPIRES"
+VISIBILITY="$DEF_VISIBILITY"
+BURN_AFTER="$DEF_BURN"
+DO_COPY=true
+DO_QR=true
+DO_CONFIRM=true
+DO_SCAN=true
+FORCE=false
+DRY_RUN=false
+INTERACTIVE=false
+FROM_STDIN=false
+TITLE_SET=false
+LANG_SET=false
+EXP_SET=false
+VIS_SET=false
+BURN_SET=false
 
 # ------------------------------------------------------------
 # Dependencies
 # ------------------------------------------------------------
 
-for cmd in curl jq gum fzf; do
-    if ! command -v "$cmd" &>/dev/null; then
-        die "Missing dependency: $cmd"
-    fi
-done
+command -v curl &>/dev/null || die "Missing dependency: curl"
+command -v gum  &>/dev/null || die "Missing dependency: gum" "Install: sudo pacman -S gum"
+command -v fzf  &>/dev/null || die "Missing dependency: fzf" "Install: sudo pacman -S fzf"
 
 # ------------------------------------------------------------
 # Arguments
 # ------------------------------------------------------------
 
-FILE_PATH="${1:-}"
+while (( $# > 0 )); do
+    case "$1" in
+        -h|--help)          usage ;;
+        -V|--version)       show_version ;;
+        --languages)        list_languages ;;
+        --history)          show_history ;;
+        -t|--title)         [[ -n "${2:-}" ]] || die "Option $1 requires a value"; TITLE="$2"; TITLE_SET=true; shift 2 ;;
+        -l|--language)      [[ -n "${2:-}" ]] || die "Option $1 requires a value"; LANGUAGE="$2"; LANG_SET=true; shift 2 ;;
+        -e|--expires)       [[ -n "${2:-}" ]] || die "Option $1 requires a value"; EXPIRES="$2"; EXP_SET=true; shift 2 ;;
+        -b|--burn)          [[ -n "${2:-}" ]] || die "Option $1 requires a value"; BURN_AFTER="$2"; BURN_SET=true; shift 2 ;;
+        -u|--unlisted)      VISIBILITY="1"; VIS_SET=true; shift ;;
+        -p|--public)        VISIBILITY="0"; VIS_SET=true; shift ;;
+        -i|--interactive)   INTERACTIVE=true; shift ;;
+        -y|--yes)           DO_CONFIRM=false; shift ;;
+        -f|--force)         FORCE=true; DO_CONFIRM=true; shift ;;
+        -n|--dry-run)       DRY_RUN=true; DO_CONFIRM=false; shift ;;
+        -c|--no-copy)       DO_COPY=false; shift ;;
+        -q|--no-qr)         DO_QR=false; shift ;;
+        --no-scan)          DO_SCAN=false; shift ;;
+        -)                  FROM_STDIN=true; shift ;;
+        -*)                 die "Unknown option: $1" "Run 'hastebin --help' for usage." ;;
+        *)                  FILE_PATH="$1"; shift ;;
+    esac
+done
 
-if [[ "$FILE_PATH" == "-h" || "$FILE_PATH" == "--help" ]]; then
-    cat <<'EOF'
+# ------------------------------------------------------------
+# Validate options
+# ------------------------------------------------------------
 
-Usage:
-  hastebin
-  hastebin <file>
+case "$EXPIRES" in
+    never|1h|1d|1w|1m|3m|6m|1y|2y) ;;
+    ''|*[!0-9]*) die "Invalid --expires value: $EXPIRES" "Allowed: ${EXPIRY_VALUES[*]} or a number of seconds." ;;
+esac
 
-Upload a file to pste.us and copy the URL.
+if [[ "$BURN_AFTER" != "0" ]]; then
+    [[ "$BURN_AFTER" =~ ^[0-9]+$ ]] && (( BURN_AFTER >= 1 && BURN_AFTER <= 9999 )) \
+        || die "Invalid --burn value: $BURN_AFTER" "Must be 0 (off) or 1–9999 views."
+fi
 
-Examples:
-  hastebin
-  hastebin script.sh
-EOF
-    exit 0
+if [[ "$LANG_SET" == true ]]; then
+    [[ " ${SUPPORTED_LANGUAGES[*]} " == *" $LANGUAGE "* ]] \
+        || die "Unsupported language: $LANGUAGE" "Run 'hastebin --languages' to see the list."
 fi
 
 # ------------------------------------------------------------
-# Select file
+# Select file (interactive) or read stdin
 # ------------------------------------------------------------
 
-if [[ -z "$FILE_PATH" ]]; then
+if [[ "$FROM_STDIN" == true ]]; then
+    TMP_CONTENT=$(mktemp)
+    cat > "$TMP_CONTENT"
+    [[ -s "$TMP_CONTENT" ]] || die "No input received on stdin."
+    FILE_PATH="$TMP_CONTENT"
+    [[ "$TITLE_SET" == true ]] || TITLE="stdin"
+    [[ "$LANG_SET" == true ]] || LANGUAGE="text"
 
+elif [[ -z "${FILE_PATH:-}" ]]; then
     FILE_PATH=$(
         find . -maxdepth 1 -type f -printf '%f\n' |
         fzf \
@@ -100,10 +419,9 @@ if [[ -z "$FILE_PATH" ]]; then
             --pointer="▸" \
             --marker="◆" \
             --color="bg+:#313244,bg:#11111b,spinner:#f5c2e7,hl:#f38ba8,fg:#cdd6f4,header:#7f849c,pointer:#a6e3a1,marker:#f5c2e7,fg+:#cdd6f4,prompt:#89b4fa,hl+:#f38a8a,border:#585b70" \
-            --preview='bat --style=numbers --color=always --line-range=:80 {}' \
+            --preview='bat --style=numbers --color=always --line-range=:80 {} 2>/dev/null || cat {}' \
             --preview-window='right:55%:wrap'
-    )
-
+    ) || exit 0
     [[ -n "$FILE_PATH" ]] || exit 0
 fi
 
@@ -114,17 +432,15 @@ fi
 [[ -f "$FILE_PATH" ]] || die "File does not exist: $FILE_PATH"
 [[ -r "$FILE_PATH" ]] || die "File is not readable: $FILE_PATH"
 
-# ------------------------------------------------------------
-# File information
-# ------------------------------------------------------------
+if [[ "$FROM_STDIN" == true ]]; then
+    FILE_NAME="-"
+else
+    FILE_NAME="$(basename "$FILE_PATH")"
+fi
 
-FILE_NAME="$(basename "$FILE_PATH")"
-
-FILE_BYTES=$(
-    stat -c%s "$FILE_PATH" 2>/dev/null ||
-    stat -f%z "$FILE_PATH" 2>/dev/null ||
-    echo 0
-)
+FILE_BYTES=$(stat -c%s "$FILE_PATH" 2>/dev/null || stat -f%z "$FILE_PATH" 2>/dev/null || echo 0)
+(( FILE_BYTES > 0 ))        || die "File is empty: $FILE_NAME"
+(( FILE_BYTES <= MAX_BYTES )) || die "File exceeds the 10 MB server limit: $FILE_NAME"
 
 if command -v numfmt &>/dev/null; then
     FILE_SIZE=$(numfmt --to=iec --suffix=B "$FILE_BYTES")
@@ -134,10 +450,58 @@ fi
 
 FILE_TYPE=$(file -b "$FILE_PATH" 2>/dev/null || echo "Unknown")
 FILE_TYPE="${FILE_TYPE%%,*}"
+(( ${#FILE_TYPE} > 34 )) && FILE_TYPE="${FILE_TYPE:0:31}..."
 
-# Keep metadata compact
-if (( ${#FILE_TYPE} > 38 )); then
-    FILE_TYPE="${FILE_TYPE:0:35}..."
+[[ "$TITLE_SET" == true ]] || TITLE="$FILE_NAME"
+[[ "$LANG_SET"  == true ]] || LANGUAGE="$(detect_language "$FILE_PATH")"
+
+# ------------------------------------------------------------
+# SAFETY scans (before any upload)
+# ------------------------------------------------------------
+
+SENSITIVE_HIT=false
+SECRET_HITS=""
+SECRET_COUNT=0
+LARGE=false
+(( FILE_BYTES > WARN_BYTES )) && LARGE=true
+
+if is_sensitive_path "$FILE_PATH"; then
+    SENSITIVE_HIT=true
+fi
+
+if [[ "$DO_SCAN" == true ]]; then
+    SECRET_HITS="$(scan_secrets "$FILE_PATH")"
+    if [[ -n "$SECRET_HITS" ]]; then
+        SECRET_COUNT="$(printf '%s\n' "$SECRET_HITS" | wc -l)"
+    fi
+fi
+
+# ------------------------------------------------------------
+# Interactive option tuning
+# ------------------------------------------------------------
+
+if [[ "$INTERACTIVE" == true ]]; then
+    clear
+    gum style --foreground 212 --bold --margin "1 2" "󰒿  Hastebin · configure" 2>/dev/null || true
+
+    TITLE=$(gum input --prompt=" Title      ▸ " --value="$TITLE" --placeholder="Untitled" --prompt.foreground 212) || TITLE="$TITLE"
+
+    LANGUAGE=$(printf '%s\n' "${SUPPORTED_LANGUAGES[@]}" | \
+        gum filter --prompt=" Language   ▸ " --value="$LANGUAGE" --placeholder="text" --height 12) || true
+    [[ -n "$LANGUAGE" ]] || LANGUAGE="text"
+
+    EXPIRES=$(printf '%s\n' "${EXPIRY_VALUES[@]}" | \
+        gum filter --prompt=" Expires    ▸ " --value="$EXPIRES" --height 10) || true
+    [[ -n "$EXPIRES" ]] || EXPIRES="$DEF_EXPIRES"
+
+    if gum confirm --default=no --prompt.foreground 212 " Make it public (listed in /recent)?"; then
+        VISIBILITY="0"
+    else
+        VISIBILITY="1"
+    fi
+
+    BURN_AFTER=$(gum input --prompt=" Burn after ▸ " --value="$BURN_AFTER" --placeholder="views, 0=off") || BURN_AFTER="$DEF_BURN"
+    [[ "$BURN_AFTER" =~ ^[0-9]+$ ]] || BURN_AFTER="$DEF_BURN"
 fi
 
 # ------------------------------------------------------------
@@ -146,29 +510,130 @@ fi
 
 TMP_RESPONSE=$(mktemp)
 TMP_PROGRESS=$(mktemp)
+TMP_COOKIES=$(mktemp)
+TMP_RESPONSE_CODE=$(mktemp)
 
 # ------------------------------------------------------------
-# Header
+# Safety gate
+# ------------------------------------------------------------
+
+SAFETY_BLOCKED=false
+
+if [[ "$SENSITIVE_HIT" == true || "$SECRET_COUNT" -gt 0 || "$LARGE" == true ]]; then
+    clear
+    echo
+    printf "  ${YELLOW}${BOLD}󰒃  Safety check${RESET}\n"
+    echo
+    rule
+
+    if [[ "$SENSITIVE_HIT" == true ]]; then
+        printf "  ${RED}✗${RESET}  ${BOLD}${TEXT}Sensitive file detected${RESET}\n"
+        printf "     ${DIM}%s looks like a credentials/secrets file.${RESET}\n" "$FILE_NAME"
+        printf "     ${DIM}Anyone with the link can read it.${RESET}\n"
+        echo
+        SAFETY_BLOCKED=true
+    fi
+
+    if (( SECRET_COUNT > 0 )); then
+        printf "  ${RED}✗${RESET}  ${BOLD}${TEXT}Possible secrets found${RESET} ${DIM}(%s match(es))${RESET}\n" "$SECRET_COUNT"
+        shown=0
+        while IFS= read -r hit; do
+            printf "     ${DIM}line %s${RESET}\n" "${hit%%:*}"
+            shown=$(( shown + 1 ))
+            (( shown >= 8 )) && { printf "     ${DIM}…${RESET}\n"; break; }
+        done <<< "$SECRET_HITS"
+        echo
+        SAFETY_BLOCKED=true
+    fi
+
+    if [[ "$LARGE" == true ]]; then
+        printf "  ${YELLOW}⚠${RESET}  ${BOLD}${TEXT}Large file${RESET} ${DIM}(%s)${RESET}\n" "$FILE_SIZE"
+        printf "     ${DIM}Large pastes are slow to render and easy to leak.${RESET}\n"
+        echo
+    fi
+
+    rule
+    echo
+
+    if [[ "$SAFETY_BLOCKED" == true && "$FORCE" != true && "$DRY_RUN" != true ]]; then
+        printf "  ${DIM}Blocked for your safety. Review the file, then re-run with${RESET} ${YELLOW}--force${RESET} ${DIM}to override.${RESET}\n"
+        echo
+        exit 2
+    fi
+
+    if [[ "$SAFETY_BLOCKED" == true && "$FORCE" == true ]]; then
+        warn "Overriding safety block (--force). Secrets WILL be uploaded."
+        echo
+    fi
+
+    if [[ "$DRY_RUN" != true ]]; then
+        if ! gum confirm --default=no --prompt.foreground 212 " Continue and upload anyway?"; then
+            printf "\n"; info "Upload cancelled."
+            printf "\n"
+            exit 0
+        fi
+    fi
+fi
+
+# ------------------------------------------------------------
+# Header / preview
 # ------------------------------------------------------------
 
 clear
-
+echo
+gum style --border rounded --border-foreground 212 --padding "0 2" --margin "0 0" \
+    --foreground 212 --bold "󰒿  Hastebin" 2>/dev/null || \
+    printf "  ${MAUVE}${BOLD}󰒿  Hastebin${RESET}   ${DIM}quick & private file sharing${RESET}\n"
+echo
+printf "  ${BLUE}󰈔${RESET}  ${BOLD}${TEXT}%s${RESET}\n" "$FILE_NAME"
+echo
+kv "size"   "$FILE_SIZE  ${DIM}·${RESET}  $FILE_TYPE"
+kv "lang"   "$LANGUAGE"
+kv "title"  "$TITLE"
+kv "expire" "$(expiry_label "$EXPIRES")"
+kv "vis"    "$([[ "$VISIBILITY" == "0" ]] && printf '%s' "${YELLOW}public ${RED}(listed!)${RESET}" || printf '%s' "${GREEN}unlisted${RESET}")"
+kv "burn"   "$([[ "$BURN_AFTER" == "0" ]] && echo "off" || echo "after ${BURN_AFTER} views")"
+[[ "$SECRET_COUNT" -gt 0 ]] && kv "warn" "${YELLOW}${SECRET_COUNT} possible secret(s)${RESET}"
+echo
+rule
 echo
 
-printf "  ${MAUVE}◆${RESET} ${TEXT}Hastebin${RESET} ${DIM}·${RESET} ${SUBTEXT}quick file sharing${RESET}\n"
+# ------------------------------------------------------------
+# Dry run
+# ------------------------------------------------------------
 
-echo
+if [[ "$DRY_RUN" == true ]]; then
+    info "Dry run — nothing was uploaded."
+    echo
+    printf "  ${DIM}Paste would be created at ${BLUE}%s${RESET}${DIM} with the settings above.${RESET}\n" "$BASE_URL"
+    echo
+    exit 0
+fi
 
-printf "  ${DIM}────────────────────────────────────────────────────────${RESET}\n"
+# ------------------------------------------------------------
+# Confirmation
+# ------------------------------------------------------------
 
-printf "  ${BLUE}󰈔${RESET}  ${TEXT}%s${RESET}\n" "$FILE_NAME"
+if [[ "$DO_CONFIRM" == true ]]; then
+    if ! gum confirm --default=no --prompt.foreground 212 " Upload to pste.us now?"; then
+        printf "\n"; info "Upload cancelled."
+        printf "\n"
+        exit 0
+    fi
+    echo
+fi
 
-printf "  ${DIM}size${RESET}  ${SUBTEXT}%s${RESET}    " "$FILE_SIZE"
-printf "${DIM}type${RESET}  ${SUBTEXT}%s${RESET}\n" "$FILE_TYPE"
+# ------------------------------------------------------------
+# CSRF token
+# ------------------------------------------------------------
 
-printf "  ${DIM}────────────────────────────────────────────────────────${RESET}\n"
+CSRF_TOKEN=""
+curl -sS -c "$TMP_COOKIES" -o /dev/null "$BASE_URL" 2>/dev/null || true
+[[ -f "$TMP_COOKIES" ]] && CSRF_TOKEN=$(awk '$6 == "csrf_token" { print $7; exit }' "$TMP_COOKIES")
 
-echo
+if [[ -z "$CSRF_TOKEN" ]]; then
+    die "Could not obtain a CSRF token from $BASE_URL" "Check your network connection and try again."
+fi
 
 # ------------------------------------------------------------
 # Upload spinner
@@ -178,50 +643,49 @@ printf "  ${CYAN}󰑓${RESET}  ${TEXT}Uploading${RESET} "
 
 (
     while true; do
-        printf "${DIM}·${RESET}"
-        sleep 0.20
-
-        printf "\b \b"
-        printf "${DIM}•${RESET}"
-        sleep 0.20
-
-        printf "\b \b"
-        printf "${CYAN}•${RESET}"
-        sleep 0.20
-
+        printf "${DIM}·${RESET}"; sleep 0.15
+        printf "\b \b"; printf "${DIM}•${RESET}"; sleep 0.15
+        printf "\b \b"; printf "${CYAN}•${RESET}"; sleep 0.15
         printf "\b \b"
     done
 ) &
-
 SPINNER_PID=$!
 
-# ------------------------------------------------------------
-# Upload
-# ------------------------------------------------------------
-
 curl \
-    -fS \
     --progress-bar \
     -X POST \
-    -H "Content-Type: text/plain" \
-    --data-binary @"$FILE_PATH" \
-    "$UPLOAD_URL" \
-    >"$TMP_RESPONSE" \
-    2>"$TMP_PROGRESS" &
-
+    -b "$TMP_COOKIES" \
+    -H "X-CSRF-Token: $CSRF_TOKEN" \
+    -F "csrf_token=$CSRF_TOKEN" \
+    -F "title=$TITLE" \
+    -F "language=$LANGUAGE" \
+    -F "expires_in=$EXPIRES" \
+    -F "visibility=$VISIBILITY" \
+    -F "burn_after=$BURN_AFTER" \
+    -F "content=<$FILE_PATH" \
+    -w '%{http_code}' \
+    -o "$TMP_RESPONSE" \
+    "$CREATE_URL" \
+    2>"$TMP_PROGRESS" >"$TMP_RESPONSE_CODE" &
 CURL_PID=$!
 
-wait "$CURL_PID"
-CURL_STATUS=$?
-
-kill "$SPINNER_PID" 2>/dev/null
-wait "$SPINNER_PID" 2>/dev/null
-
-# Clear spinner line
+wait "$CURL_PID"; CURL_STATUS=$?
+kill "$SPINNER_PID" 2>/dev/null; wait "$SPINNER_PID" 2>/dev/null; SPINNER_PID=""
 printf "\r\033[2K"
 
-if [[ "$CURL_STATUS" -ne 0 ]]; then
-    printf "  ${RED}✗${RESET} ${TEXT}Upload failed.${RESET}\n"
+HTTP_CODE="$(tr -d '[:space:]' < "$TMP_RESPONSE_CODE" 2>/dev/null)"
+
+if [[ "$CURL_STATUS" -ne 0 || -z "$HTTP_CODE" ]]; then
+    printf "  ${RED}✗${RESET}  ${TEXT}Upload failed.${RESET}\n"
+    [[ -s "$TMP_PROGRESS" ]] && printf "     ${DIM}%s${RESET}\n" "$(tr -d '\r' < "$TMP_PROGRESS" | tail -n1)"
+    echo
+    exit 1
+fi
+
+if (( HTTP_CODE < 200 || HTTP_CODE >= 300 )); then
+    SERVER_MSG=$(tr -d '\r' < "$TMP_RESPONSE" | head -n3 | tr '\n' ' ')
+    printf "  ${RED}✗${RESET}  ${TEXT}Upload failed.${RESET} ${DIM}(HTTP %s)${RESET}\n" "$HTTP_CODE"
+    [[ -n "$SERVER_MSG" ]] && printf "     ${DIM}%s${RESET}\n" "$SERVER_MSG"
     echo
     exit 1
 fi
@@ -230,107 +694,64 @@ fi
 # Parse response
 # ------------------------------------------------------------
 
-HASTE_KEY=$(jq -r '.key // empty' "$TMP_RESPONSE" 2>/dev/null)
-[[ -n "$HASTE_KEY" ]] || die "Invalid response from server."
-URL="$BASE_URL/$HASTE_KEY"
+URL=$(tr -d '\r' < "$TMP_RESPONSE" | grep -oE "https?://[^[:space:]]+" | head -n1)
+[[ -n "$URL" ]] || die "Invalid response from server."
 
-# ------------------------------------------------------------
-# Clipboard
-# ------------------------------------------------------------
+HASTE_KEY="${URL##*/}"
+EXPIRES_AT="$(date -d "+$EXPIRES" '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || echo "$EXPIRES")"
 
+# history
+if mkdir -p "$(dirname "$HISTORY_FILE")" 2>/dev/null; then
+    [[ -f "$HISTORY_FILE" ]] || printf 'URL\tTITLE\tEXPIRES\n' > "$HISTORY_FILE"
+    printf '%s\t%s\t%s\n' "$URL" "$TITLE" "$EXPIRES_AT" >> "$HISTORY_FILE"
+fi
+
+# clipboard
 COPIED=false
-
-if command -v wl-copy &>/dev/null; then
-    printf '%s' "$URL" | wl-copy
-    COPIED=true
-
-elif command -v xclip &>/dev/null; then
-    printf '%s' "$URL" | xclip -selection clipboard
-    COPIED=true
-
-elif command -v xsel &>/dev/null; then
-    printf '%s' "$URL" | xsel --clipboard --input
-    COPIED=true
-
-elif command -v pbcopy &>/dev/null; then
-    printf '%s' "$URL" | pbcopy
-    COPIED=true
+if [[ "$DO_COPY" == true ]]; then
+    if command -v wl-copy &>/dev/null; then printf '%s' "$URL" | wl-copy && COPIED=true
+    elif command -v xclip &>/dev/null; then printf '%s' "$URL" | xclip -selection clipboard && COPIED=true
+    elif command -v xsel &>/dev/null; then printf '%s' "$URL" | xsel --clipboard --input && COPIED=true
+    elif command -v pbcopy &>/dev/null; then printf '%s' "$URL" | pbcopy && COPIED=true
+    fi
 fi
 
-# ------------------------------------------------------------
-# Generate QR
-# ------------------------------------------------------------
-
-QR=""
-
-if command -v qrencode &>/dev/null; then
-   QR=$(
-    qrencode \
-        -t ANSIUTF8i \
-        -m 1 \
-        -l M \
-        "$URL"
-    )
-fi
-
-# ------------------------------------------------------------
-# Final output
-# ------------------------------------------------------------
-
-printf "  ${GREEN}✓${RESET}  ${TEXT}Upload complete${RESET}\n"
-
-# File information
-printf "  ${DIM}FILE${RESET}  ${TEXT}%s${RESET}\n" "$FILE_NAME"
-printf "  ${DIM}SIZE${RESET}  ${SUBTEXT}%s${RESET}\n" "$FILE_SIZE"
-printf "  ${DIM}TYPE${RESET}  ${SUBTEXT}%s${RESET}\n" "$FILE_TYPE"
-
-echo
-
-# URL
-printf "  ${DIM}URL${RESET}\n"
-printf "  ${BLUE}%s${RESET}\n" "$URL"
-
-echo
-
-# ------------------------------------------------------------
 # QR
+QR=""
+[[ "$DO_QR" == true ]] && command -v qrencode &>/dev/null && QR=$(qrencode -t ANSIUTF8i -m 1 -l M "$URL")
+
 # ------------------------------------------------------------
+# Result
+# ------------------------------------------------------------
+
+printf "  ${GREEN}${BOLD}✓  Upload complete${RESET}\n"
+echo
+printf "  ${DIM}URL${RESET}\n"
+printf "  ${BLUE}${BOLD}%s${RESET}\n" "$URL"
+echo
+kv "title"  "$TITLE"
+kv "lang"   "$LANGUAGE"
+kv "expire" "$(expiry_label "$EXPIRES")"
+kv "vis"    "$([[ "$VISIBILITY" == "0" ]] && echo "public" || echo "unlisted")"
+kv "burn"   "$([[ "$BURN_AFTER" == "0" ]] && echo "off" || echo "after ${BURN_AFTER} views")"
+echo
 
 if [[ -n "$QR" ]]; then
-
-    printf "  ${DIM}SCAN TO OPEN${RESET}\n"
+    printf "  ${DIM}SCAN TO OPEN${RESET}\n\n"
+    while IFS= read -r line; do printf "    %s\n" "$line"; done <<< "$QR"
+    echo; echo
+elif [[ "$DO_QR" == true ]]; then
+    warn "qrencode is not installed  ${DIM}(sudo pacman -S qrencode)${RESET}"
     echo
-
-    while IFS= read -r line; do
-        printf "    %s\n" "$line"
-    done <<< "$QR"
-
-    echo
-    echo
-
-else
-
-    printf "  ${YELLOW}⚠${RESET}  ${SUBTEXT}qrencode is not installed${RESET}\n"
-    printf "     ${DIM}Install: sudo pacman -S qrencode${RESET}\n"
-    echo
-
 fi
-
-# ------------------------------------------------------------
-# Clipboard status
-# ------------------------------------------------------------
 
 if [[ "$COPIED" == true ]]; then
     printf "  ${GREEN}󰆏${RESET}  ${SUBTEXT}URL copied to clipboard${RESET}\n"
-else
-    printf "  ${YELLOW}󰆏${RESET}  ${SUBTEXT}Clipboard utility not found${RESET}\n"
+elif [[ "$DO_COPY" == true ]]; then
+    warn "No clipboard utility found"
 fi
 
 echo
-
-printf "  ${DIM}────────────────────────────────────────────────────────${RESET}\n"
+rule
 printf "  ${GREEN}◆${RESET}  ${SUBTEXT}Ready${RESET}\n"
-
 echo
-
-
