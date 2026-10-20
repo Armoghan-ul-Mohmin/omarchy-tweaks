@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>git cheatsheet — omarchy-tweaks</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">omarchy-tweaks <span>shell docs</span></a>
+      <div class="nav-links">
+        <a href="zsh-cheatsheet.html">zsh</a>
+        <a href="aliases.html">aliases</a>
+        <a href="zsh-config.html">config</a>
+        <a class="active" aria-current="page" href="git-cheatsheet.html">git</a>
+        <a href="functions.html">functions</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="sheet">
+    <header class="page-head">
+      <h1><span class="title">git</span> cheatsheet</h1>
+      <p class="lede">
+        Day-to-day git, plus this configuration's <code>g…</code> aliases,
+        gum-powered wrappers and fuzzy widgets. For the plain alias table see
+        <a href="aliases.html#git-aliases">My Aliases → Git</a>.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <ul>
+        <li><a href="#basics">Basics</a></li>
+        <li><a href="#staging">Staging</a></li>
+        <li><a href="#branching">Branching</a></li>
+        <li><a href="#remote">Remote</a></li>
+        <li><a href="#inspect">Inspect</a></li>
+        <li><a href="#stash">Stash</a></li>
+        <li><a href="#undo">Undo</a></li>
+        <li><a href="#tags">Tags</a></li>
+        <li><a href="#wrappers">Gum wrappers</a></li>
+        <li><a href="#widgets">Fuzzy widgets</a></li>
+      </ul>
+    </nav>
+
+    <main class="post-content">
+      <section class="h2-section">
+        <h2 id="everyday">Everyday git<a class="anchor" href="#everyday">#</a></h2>
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="basics">Basics<a class="anchor" href="#basics">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>git clone URL</code></td><td>Clone a repository</td></tr>
+                  <tr><td><code>git init</code></td><td>Create a repository here</td></tr>
+                  <tr><td><code>git status -sb</code></td><td>Short status with branch line <em>(alias <code>gs</code>)</em></td></tr>
+                  <tr><td><code>git add file</code></td><td>Stage a file</td></tr>
+                  <tr><td><code>git commit -m "msg"</code></td><td>Commit staged changes</td></tr>
+                  <tr><td><code>git commit</code></td><td>Open the editor for a message</td></tr>
+                  <tr><td><code>git diff</code></td><td>Unstaged changes</td></tr>
+                  <tr><td><code>git diff --staged</code></td><td>Staged changes <em>(alias <code>gds</code>)</em></td></tr>
+                  <tr><td><code>git log --oneline --graph --decorate -20</code></td><td>Readable history <em>(alias <code>glogp</code>)</em></td></tr>
+                  <tr><td><code>git show HEAD</code></td><td>Show the last commit incl. patch</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="staging">Staging selectively<a class="anchor" href="#staging">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>git add -p</code></td><td>Stage hunk by hunk (y/n/a/d/s/e)</td></tr>
+                  <tr><td><code>git add -i</code></td><td>Interactive staging menu</td></tr>
+                  <tr><td><code>git add -u</code></td><td>Stage all tracked modifications/deletions</td></tr>
+                  <tr><td><code>git restore --staged f</code></td><td>Unstage (keep the change)</td></tr>
+                  <tr><td><code>git clean -nd</code></td><td>Preview untracked files before deleting them</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="branching">Branching<a class="anchor" href="#branching">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>git switch -c name</code></td><td>Create and switch to a branch</td></tr>
+                  <tr><td><code>git switch name</code></td><td>Switch branches</td></tr>
+                  <tr><td><code>git branch -vv</code></td><td>List branches with tracking info</td></tr>
+                  <tr><td><code>git branch -d name</code></td><td>Delete (merged) branch</td></tr>
+                  <tr><td><code>git branch -D name</code></td><td>Force-delete branch</td></tr>
+                  <tr><td><code>git branch -m new</code></td><td>Rename current branch</td></tr>
+                  <tr><td><code>git merge --no-ff name</code></td><td>Merge keeping a branch point</td></tr>
+                  <tr><td><code>git rebase main</code></td><td>Replay current branch onto main</td></tr>
+                  <tr><td><code>git rebase -i HEAD~3</code></td><td>Rewrite the last 3 commits</td></tr>
+                  <tr><td><code>git rebase --continue</code></td><td>Resume after fixing a conflict</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="remote">Remote<a class="anchor" href="#remote">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>git remote -v</code></td><td>List remotes with URLs</td></tr>
+                  <tr><td><code>git fetch --all --prune</code></td><td>Update remotes, drop deleted refs</td></tr>
+                  <tr><td><code>git pull --rebase</code></td><td>Fetch + rebase local work on top</td></tr>
+                  <tr><td><code>git push -u origin HEAD</code></td><td>Push and set upstream to the current branch</td></tr>
+                  <tr><td><code>git push origin --delete name</code></td><td>Delete a remote branch</td></tr>
+                  <tr><td><code>git push --follow-tags</code></td><td>Push commits and their annotated tags</td></tr>
+                  <tr><td><code>git push --force-with-lease</code></td><td>Safe force push (fails if remote moved)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="inspect">Inspect<a class="anchor" href="#inspect">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>git log --since=yesterday</code></td><td>History filtered by date</td></tr>
+                  <tr><td><code>git log --grep="fix"</code></td><td>History filtered by message</td></tr>
+                  <tr><td><code>git log -p -- path</code></td><td>History of one file</td></tr>
+                  <tr><td><code>git log --name-status</code></td><td>Files touched per commit</td></tr>
+                  <tr><td><code>git blame -L 10,30 file</code></td><td>Who changed lines 10–30</td></tr>
+                  <tr><td><code>git shortlog -sn</code></td><td>Commits per author</td></tr>
+                  <tr><td><code>git diff main...HEAD</code></td><td>Everything your branch changed</td></tr>
+                  <tr><td><code>git reflog</code></td><td>Journal of HEAD movements (recovery)</td></tr>
+                  <tr><td><code>git fsck</code></td><td>Verify repository integrity</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="stash">Stash<a class="anchor" href="#stash">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>git stash push -u -m "wip"</code></td><td>Stash tracked + untracked with a message <em>(<code>gsh</code>)</em></td></tr>
+                  <tr><td><code>git stash list</code></td><td>List stashes <em>(<code>gshl</code>)</em></td></tr>
+                  <tr><td><code>git stash pop</code></td><td>Apply and drop the newest stash <em>(<code>gshp</code>)</em></td></tr>
+                  <tr><td><code>git stash apply stash@{1}</code></td><td>Apply without dropping</td></tr>
+                  <tr><td><code>git stash drop</code></td><td>Discard the newest stash</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="undo">Undo<a class="anchor" href="#undo">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>git restore file</code></td><td>Discard local changes to a file</td></tr>
+                  <tr><td><code>git commit --amend</code></td><td>Rewrite the last commit <em>(<code>gamend</code> = guided)</em></td></tr>
+                  <tr><td><code>git commit --amend --no-edit</code></td><td>Amend keeping the message</td></tr>
+                  <tr><td><code>git reset --soft HEAD~1</code></td><td>Undo commit, keep changes staged</td></tr>
+                  <tr><td><code>git reset HEAD~1</code></td><td>Undo commit, keep changes unstaged</td></tr>
+                  <tr><td><code>git reset --hard HEAD~1</code></td><td>Undo commit and changes <em>(destructive)</em></td></tr>
+                  <tr><td><code>git revert SHA</code></td><td>New commit that undoes an old one (safe for shared branches)</td></tr>
+                  <tr><td><code>git cherry-pick SHA</code></td><td>Copy a commit onto the current branch</td></tr>
+                </tbody>
+              </table>
+              <p class="note warn">
+                <code>reset --hard</code> and <code>clean</code> destroy work —
+                check <code>git status</code> and <code>git stash</code> first.
+                <code>git reflog</code> rescues most accidents.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="tags">Tags<a class="anchor" href="#tags">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>git tag v1.0.0</code></td><td>Lightweight tag on HEAD</td></tr>
+                  <tr><td><code>git tag -a v1.0.0 -m "release"</code></td><td>Annotated tag</td></tr>
+                  <tr><td><code>git push origin v1.0.0</code></td><td>Push a tag</td></tr>
+                  <tr><td><code>git describe --tags</code></td><td>Nearest tag name</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+      <section class="h2-section">
+        <h2 id="in-this-config">In this config<a class="anchor" href="#in-this-config">#</a></h2>
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="wrappers">Gum wrappers<a class="anchor" href="#wrappers">#</a></h3>
+            <div class="body">
+              <p>
+                Plain aliases live on <a href="aliases.html#git-aliases">My Aliases → Git</a>.
+                These <code>g…</code> commands wrap git with gum prompts and feedback —
+                the functions are in <a href="functions.html#git">Functions → Git</a>:
+              </p>
+              <table class="-headers">
+                <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+                <tbody>
+                  <tr><td><code>gfetch</code> / <code>gpull</code> / <code>gpush</code></td><td>Runs the command, prints an info line before and a green/red result after; returns git's exit code</td></tr>
+                  <tr><td><code>gcommit "msg"</code></td><td>Commits; with no arguments prompts with <code>gum input</code></td></tr>
+                  <tr><td><code>gcomit</code></td><td>Conventional-commit wizard: pick type → optional scope → message → optional body</td></tr>
+                  <tr><td><code>gclone</code></td><td>Prompts for a repository URL if none is given</td></tr>
+                  <tr><td><code>gco</code></td><td>Prompts for a branch name if none is given</td></tr>
+                  <tr><td><code>gbranch</code></td><td>Lists local branches in <code>gum choose</code> and switches</td></tr>
+                  <tr><td><code>gamend</code></td><td>Amend with the current subject/body prefilled for editing</td></tr>
+                </tbody>
+              </table>
+              <pre><code>gcomit            # wizard: fix(docs): …
+gcommit "chore: bump deps"
+gbranch           # pick a branch from a list
+gpush             # → 󰊢 Pushing from remote… / Push complete</code></pre>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="widgets">Fuzzy widgets<a class="anchor" href="#widgets">#</a></h3>
+            <div class="body">
+              <table class="-shortcuts -headers">
+                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr><td><code>Ctrl+Alt+L</code></td><td>fzf over <code>git log</code> — preview shows the full patch; Enter inserts <code>git show &lt;hash&gt;</code> into the prompt</td></tr>
+                  <tr><td><code>Ctrl+Alt+B</code></td><td>fzf over all branches (local + remote) with log preview — Enter switches, remote branches get <code>switch --track</code></td></tr>
+                  <tr><td><code>Alt+G</code></td><td>Full-screen lazygit TUI</td></tr>
+                  <tr><td><code>Tab</code> after <code>git checkout </code></td><td>fzf-tab branch completion with per-branch log preview</td></tr>
+                  <tr><td><code>Tab</code> after <code>git log/show/diff</code></td><td>fzf-tab completion previewing commits/branches/diffs</td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                The completions come from <code>30-fzf-tab.zsh</code>; widget definitions from
+                <code>30-fzf-tab.zsh</code> and <code>60-keybindings.zsh</code>.
+                See the full list on <a href="zsh-config.html#keybindings">keybindings</a>.
+              </p>
+            </div>
+          </section>
+
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-foot">
+      <p>Related: <a href="aliases.html#git-aliases">git aliases</a> ·
+         <a href="functions.html#git">git functions</a> ·
+         <a href="zsh-config.html#keybindings">keybindings</a></p>
+    </footer>
+  </div>
+</body>
+</html>

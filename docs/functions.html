@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>functions — omarchy-tweaks</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">omarchy-tweaks <span>shell docs</span></a>
+      <div class="nav-links">
+        <a href="zsh-cheatsheet.html">zsh</a>
+        <a href="aliases.html">aliases</a>
+        <a href="zsh-config.html">config</a>
+        <a href="git-cheatsheet.html">git</a>
+        <a class="active" aria-current="page" href="functions.html">functions</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="sheet">
+    <header class="page-head">
+      <h1><span class="title">Functions</span></h1>
+      <p class="lede">
+        Everything in <code>dotfiles/zsh/lib/50-functions.zsh</code>.
+        Naming convention: <code>_name</code> is the implementation, a public alias
+        (<code>ports</code> → <code>_ports</code>) exposes it — so aliases can take
+        arguments and behave predictably. Output uses gum tables/cards throughout.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <ul>
+        <li><a href="#helpers">Gum UI helpers</a></li>
+        <li><a href="#open-edit">Open &amp; edit</a></li>
+        <li><a href="#git">Git</a></li>
+        <li><a href="#file-ops">File operations</a></li>
+        <li><a href="#network">Network</a></li>
+        <li><a href="#disk">Disk</a></li>
+        <li><a href="#memory">Memory</a></li>
+        <li><a href="#notes-hash">Notes &amp; hashing</a></li>
+        <li><a href="#config-env">Config &amp; environment</a></li>
+        <li><a href="#widgets">ZLE widgets</a></li>
+      </ul>
+    </nav>
+
+    <main class="post-content">
+      <section class="h2-section">
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="helpers">Gum UI helpers<a class="anchor" href="#helpers">#</a></h3>
+            <div class="body">
+              <p>Internal building blocks used by the functions below — don't call them directly.</p>
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Shows</th></tr></thead>
+                <tbody>
+                  <tr><td><code>_gum_ok</code></td><td>Green success line with <code>󰄬</code> icon</td></tr>
+                  <tr><td><code>_gum_info</code></td><td>Cyan info line</td></tr>
+                  <tr><td><code>_gum_warn</code></td><td>Yellow warning with <code>󰀦</code> icon</td></tr>
+                  <tr><td><code>_gum_error</code></td><td>Bold red error on stderr with <code>󰅚</code> icon</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="open-edit">Open &amp; edit<a class="anchor" href="#open-edit">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><code>edit_file</code></td><td><code>edit FILE…</code></td>
+                    <td>Open files in <code>$EDITOR</code> (safe with multiple args)</td>
+                  </tr>
+                  <tr>
+                    <td><code>_open</code></td><td><code>open PATH…</code></td>
+                    <td><code>xdg-open</code> with the default app, detached</td>
+                  </tr>
+                  <tr>
+                    <td><code>_here</code></td><td><code>here</code></td>
+                    <td>Open the current directory with the default app</td>
+                  </tr>
+                  <tr>
+                    <td><code>_edit-here</code></td><td><code>edit-here</code></td>
+                    <td>Open the current directory in VS Code</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="git">Git<a class="anchor" href="#git">#</a></h3>
+            <div class="body">
+              <p>See also the <a href="git-cheatsheet.html#wrappers">git cheatsheet → gum wrappers</a>.</p>
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>_gfetch</code></td><td><code>gfetch [args]</code></td><td><code>git fetch</code> with info + result feedback, returns git's exit code</td></tr>
+                  <tr><td><code>_gpull</code></td><td><code>gpull [args]</code></td><td>Same pattern for <code>git pull</code></td></tr>
+                  <tr><td><code>_gpush</code></td><td><code>gpush [args]</code></td><td>Same pattern for <code>git push</code></td></tr>
+                  <tr><td><code>_gcommit</code></td><td><code>gcommit [msg…]</code></td><td>Commit; prompts via <code>gum input</code> when no message is given</td></tr>
+                  <tr><td><code>_gclone</code></td><td><code>gclone [url]</code></td><td>Clone; prompts for the URL when missing</td></tr>
+                  <tr><td><code>_gcheckout</code></td><td><code>gco [branch]</code></td><td>Checkout; prompts for the branch when missing</td></tr>
+                  <tr><td><code>_gbranch</code></td><td><code>gbranch</code></td><td><code>gum choose</code> over local branches → <code>git switch</code></td></tr>
+                  <tr><td><code>_gcomit</code></td><td><code>gcomit</code></td><td>Conventional-commit wizard: type → scope → message → body</td></tr>
+                  <tr><td><code>_gamend</code></td><td><code>gamend</code></td><td>Amend with the current message/body prefilled</td></tr>
+                </tbody>
+              </table>
+              <pre><code>gcomit                  # fix(ui): round the corners + optional body
+gcommit "chore: bump"   # no prompt
+gpull                   # 󰊢 Pulling from remote... / Pull complete</code></pre>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="file-ops">Interactive file operations<a class="anchor" href="#file-ops">#</a></h3>
+            <div class="body">
+              <p>Every destructive or mutating operation asks first with <code>gum confirm</code> and prints the touched paths.</p>
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td><code>remove</code></td><td><code>rm FILE…</code></td><td>Confirm, then <code>command rm -v</code></td></tr>
+                  <tr><td><code>new_file</code></td><td><code>new FILE…</code></td><td>Confirm, then <code>touch</code></td></tr>
+                  <tr><td><code>rename</code></td><td><code>rn SRC DEST</code></td><td>Confirm, then <code>mv -v</code></td></tr>
+                  <tr><td><code>copy</code></td><td><code>cp SRC… DEST</code></td><td>Confirm, then <code>cp -v</code></td></tr>
+                  <tr><td><code>move</code></td><td><code>mv SRC DEST</code></td><td>Confirm, then <code>mv -v</code></td></tr>
+                  <tr><td><code>backup</code></td><td><code>bak FILE…</code></td><td>Copy to <code>FILE.bak-YYYYmmdd-HHMMSS</code> (no prompt)</td></tr>
+                  <tr><td><code>_mkcd</code></td><td><code>mkcd [name]</code></td><td><code>mkdir -p</code> + <code>cd</code>; prompts if no name given</td></tr>
+                  <tr><td><code>_tmpdir</code></td><td><code>tmpdir</code></td><td>Subshell inside a fresh <code>mktemp -d</code>; the directory is deleted when you exit (Ctrl+D)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="network">Network<a class="anchor" href="#network">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><code>_ports</code></td><td><code>ports [filter]</code></td>
+                    <td>Table of listening sockets (<code>ss -tulwnpH</code>): PROTO, STATE, LOCAL, PEER, PROCESS — optional case-insensitive filter, footer shows the count</td>
+                  </tr>
+                  <tr>
+                    <td><code>_portkill</code></td><td><code>portkill [port]</code></td>
+                    <td>Kill whatever listens on a port; with no argument you pick one via <code>gum filter</code>. Asks before killing, warns if sudo is needed</td>
+                  </tr>
+                  <tr>
+                    <td><code>_ips</code></td><td><code>ips</code> / <code>ips -a</code></td>
+                    <td>LAN, gateway and public IP as a table; <code>-a</code> lists every IPv4 interface instead</td>
+                  </tr>
+                  <tr>
+                    <td><code>_lanip</code></td><td><code>lanip</code></td>
+                    <td>Bordered card with the local network address</td>
+                  </tr>
+                  <tr>
+                    <td><code>_wanip</code></td><td><code>wanip</code></td>
+                    <td>Bordered card with the public IP (ipinfo.io, 5s timeout)</td>
+                  </tr>
+                </tbody>
+              </table>
+              <pre><code>ports ssh            # only sockets matching "ssh"
+portkill             # pick a listener, confirm, kill</code></pre>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="disk">Disk<a class="anchor" href="#disk">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><code>_du</code></td><td><code>du [dir]</code></td>
+                    <td>Top 30 entries of a directory (default: current) with size, % of total and path; header shows the overall total</td>
+                  </tr>
+                  <tr>
+                    <td><code>_df</code></td><td><code>df</code></td>
+                    <td>Mounted filesystems: source, size, used, free, use%, mount (spaces in mount points preserved)</td>
+                  </tr>
+                  <tr>
+                    <td><code>_bigfiles</code></td><td><code>bigfiles [dir]</code></td>
+                    <td>20 largest files via <code>fd</code> (skips <code>.git</code>, <code>node_modules</code>, <code>.venv</code>, <code>target</code>) with combined size</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="memory">Memory<a class="anchor" href="#memory">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><code>_mem</code></td><td><code>mem</code></td>
+                    <td>RAM and swap table (total / used / free / shared / buff-cache / available) from <code>free -m</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="notes-hash">Notes &amp; hashing<a class="anchor" href="#notes-hash">#</a></h3>
+            <div class="body">
+              <h4>Notes</h4>
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><code>_note</code></td><td><code>note</code> · <code>note new</code> · <code>note search</code> · <code>note recent</code> · <code>note open</code></td>
+                    <td>
+                      Dashboard (choose with <code>gum choose</code>) or direct action.
+                      <strong>New:</strong> title → body (<code>gum write</code>, Ctrl+D saves) → optional tags,
+                      appended as a <code>## title</code> section with a timestamp.
+                      <strong>Search:</strong> ripgrep + fzf with a <code>bat</code> markdown preview, then page the hit.
+                      <strong>Recent:</strong> last 20 headings in <code>gum pager</code>.
+                      File: <code>$NOTES_FILE</code> (default <code>~/Documents/notes.md</code>)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>_notes</code></td><td><code>notes</code></td>
+                    <td>Open the notes file in <code>$VISUAL</code> (creates it first, shows file info card)</td>
+                  </tr>
+                </tbody>
+              </table>
+              <h4>Hashing</h4>
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><code>_hash</code></td><td><code>hash</code> · <code>hash FILE</code> · <code>hash FILE sha512</code></td>
+                    <td>
+                      With no file: pick one from <code>fzf</code> (eza/bat preview).
+                      Algorithm: <code>gum choose</code> md5 / sha1 / sha256 / sha512 / all.
+                      Files print one digest; directories walk every file (sorted) and pipe through the same
+                      checksum tool, so folders get a single combined hash. Falls back to
+                      <code>md5</code>/<code>shasum</code> on non-GNU systems
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="config-env">Zsh configuration &amp; environment<a class="anchor" href="#config-env">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Function</th><th>Called as</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><code>edit_zshrc</code></td><td><code>zshrc</code></td>
+                    <td>Pick <code>.zshrc</code> or any <code>lib/*.zsh</code> module via <code>gum filter</code>,
+                        edit it, then optionally <code>exec zsh</code> to reload</td>
+                  </tr>
+                  <tr>
+                    <td><code>_path</code></td><td><code>path</code></td>
+                    <td>Numbered table of every <code>PATH</code> entry in execution order</td>
+                  </tr>
+                  <tr>
+                    <td><code>_alias</code></td><td><code>aliass</code></td>
+                    <td>Numbered table of every defined alias with its expansion</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="widgets">ZLE widgets<a class="anchor" href="#widgets">#</a></h3>
+            <div class="body">
+              <p>
+                Widgets live in <code>30-fzf-tab.zsh</code> and <code>60-keybindings.zsh</code>
+                (they need a keypress, not a command). Overview here, bindings on the
+                <a href="zsh-config.html#keybindings">keybindings page</a>:
+              </p>
+              <table class="-headers">
+                <thead><tr><th>Widget</th><th>Runs</th></tr></thead>
+                <tbody>
+                  <tr><td><code>run-tui</code></td><td>Helper that gives any TUI direct access to the real tty and restores the terminal afterwards — used by all launcher widgets</td></tr>
+                  <tr><td><code>zij-widget</code>, <code>tij-widget</code>, <code>hb-widget</code>, <code>lazygit-widget</code>, <code>spf-widget</code>, <code>nvim-widget</code>, <code>code-widget</code>, <code>server-widget</code>, <code>keybind-widget</code></td><td>Launch the matching TUI (<code>zij</code>, <code>tij</code>, …)</td></tr>
+                  <tr><td><code>atuin-ai</code></td><td><code>atuin ai inline</code></td></tr>
+                  <tr><td><code>fzf-widget</code></td><td>fzf file finder → inserts the path</td></tr>
+                  <tr><td><code>fzf_file_dir_picker</code></td><td>fzf over <code>fd</code> → inserts files, <code>cd</code>s into directories</td></tr>
+                  <tr><td><code>fzf_git_log_search</code></td><td>fzf over <code>git log</code> → inserts <code>git show &lt;hash&gt;</code></td></tr>
+                  <tr><td><code>fzf_git_branch</code></td><td>fzf branch switcher (creates tracking branches)</td></tr>
+                  <tr><td><code>fzf_shell_variables</code></td><td>fzf over environment variables → inserts the value</td></tr>
+                  <tr><td><code>fzf_zoxide_jump</code></td><td>interactive zoxide picker → runs <code>cd</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-foot">
+      <p>Source: <a href="../dotfiles/zsh/lib/50-functions.zsh">lib/50-functions.zsh</a> ·
+         Related: <a href="aliases.html">aliases</a>,
+         <a href="git-cheatsheet.html">git</a>,
+         <a href="zsh-config.html">config</a></p>
+    </footer>
+  </div>
+</body>
+</html>

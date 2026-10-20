@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>zsh cheatsheet — omarchy-tweaks</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">omarchy-tweaks <span>shell docs</span></a>
+      <div class="nav-links">
+        <a class="active" aria-current="page" href="zsh-cheatsheet.html">zsh</a>
+        <a href="aliases.html">aliases</a>
+        <a href="zsh-config.html">config</a>
+        <a href="git-cheatsheet.html">git</a>
+        <a href="functions.html">functions</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="sheet">
+    <header class="page-head">
+      <h1><span class="title">zsh</span> cheatsheet</h1>
+      <p class="lede">
+        Reference for the shell itself — expansions, globbing, redirection, line
+        editing and the way history works in this configuration.
+        Custom aliases and functions live on their own pages.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <ul>
+        <li><a href="#expressions">Expressions</a></li>
+        <li><a href="#parameter-expansion">Parameter expansion</a></li>
+        <li><a href="#brace-expansion">Brace expansion</a></li>
+        <li><a href="#globbing">Globbing</a></li>
+        <li><a href="#glob-qualifiers">Glob qualifiers</a></li>
+        <li><a href="#process-substitution">Process substitution</a></li>
+        <li><a href="#redirection">Redirection</a></li>
+        <li><a href="#quoting">Quoting</a></li>
+        <li><a href="#line-editing">Line editing</a></li>
+        <li><a href="#history">History &amp; Atuin</a></li>
+        <li><a href="#job-control">Job control</a></li>
+        <li><a href="#builtins">Useful builtins</a></li>
+        <li><a href="#change-default-shell">Change default shell</a></li>
+      </ul>
+    </nav>
+
+    <main class="post-content">
+      <section class="h2-section">
+        <h2 id="expansions">Expansions<a class="anchor" href="#expansions">#</a></h2>
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="expressions">Expressions<a class="anchor" href="#expressions">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Expression</th><th>Example</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>!!</code></td>
+                    <td><code>sudo !!</code></td>
+                    <td>Last command (<code>sudo !!</code>)</td>
+                  </tr>
+                  <tr>
+                    <td><code>!*</code></td>
+                    <td><code>vim !*</code></td>
+                    <td>Last command's parameters (<code>vim !*</code>)</td>
+                  </tr>
+                  <tr>
+                    <td><code>!^</code></td>
+                    <td></td>
+                    <td>Last command's first parameter</td>
+                  </tr>
+                  <tr>
+                    <td><code>!$</code></td>
+                    <td></td>
+                    <td>Last command's last parameter</td>
+                  </tr>
+                  <tr>
+                    <td><code>!&lt;n&gt;</code></td>
+                    <td><code>!42</code></td>
+                    <td>Event number 42 from history</td>
+                  </tr>
+                  <tr>
+                    <td><code>!-&lt;n&gt;</code></td>
+                    <td><code>!-2</code></td>
+                    <td>nth command back</td>
+                  </tr>
+                  <tr>
+                    <td><code>^old^new</code></td>
+                    <td><code>^configure^make</code></td>
+                    <td>Quick substitution in the last command</td>
+                  </tr>
+                </tbody>
+                <tbody>
+                  <tr>
+                    <td><code>!?ls&lt;tab&gt;</code></td>
+                    <td><code>sudo !?mv</code></td>
+                    <td>Command and params of last <code>ls</code> command</td>
+                  </tr>
+                  <tr>
+                    <td><code>!?ls?:*</code> <code>&lt;tab&gt;</code></td>
+                    <td></td>
+                    <td>Params of last <code>ls</code> command</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="note warn">
+                In this config <code>bang_hist</code> is <strong>off</strong> (Atuin owns
+                history — see <a href="#history">History &amp; Atuin</a>), so <code>!!</code>,
+                <code>!$</code> etc. are disabled by default. Re-enable with
+                <code>setopt bang_hist</code> in <code>10-options.zsh</code> if you want them back.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="parameter-expansion">Parameter expansion<a class="anchor" href="#parameter-expansion">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Expression</th><th>Meaning</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>${name}</code></td><td>Value of <code>name</code></td></tr>
+                  <tr><td><code>${name:-word}</code></td><td><code>word</code> if unset or empty</td></tr>
+                  <tr><td><code>${name:=word}</code></td><td>Assign <code>word</code> as default</td></tr>
+                  <tr><td><code>${name:?msg}</code></td><td>Error with <code>msg</code> if unset</td></tr>
+                  <tr><td><code>${name:+word}</code></td><td><code>word</code> only if set and non-empty</td></tr>
+                  <tr><td><code>${#name}</code></td><td>Length of value</td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>${name:t}</code></td><td>Tail — basename (<code>/a/b/c</code> → <code>c</code>)</td></tr>
+                  <tr><td><code>${name:h}</code></td><td>Head — dirname (<code>/a/b/c</code> → <code>/a/b</code>)</td></tr>
+                  <tr><td><code>${name:r}</code></td><td>Remove extension (<code>file.txt</code> → <code>file</code>)</td></tr>
+                  <tr><td><code>${name:e}</code></td><td>Extension only (<code>file.txt</code> → <code>txt</code>)</td></tr>
+                  <tr><td><code>${name:u}</code> / <code>${name:l}</code></td><td>Upper / lower case</td></tr>
+                  <tr><td><code>${name:s/x/y}</code></td><td>Replace first <code>x</code> with <code>y</code></td></tr>
+                  <tr><td><code>${name://x/y}</code></td><td>Replace all occurrences</td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>${name#pat}</code> / <code>${name##pat}</code></td><td>Remove shortest / longest <strong>prefix</strong></td></tr>
+                  <tr><td><code>${name%pat}</code> / <code>${name%%pat}</code></td><td>Remove shortest / longest <strong>suffix</strong></td></tr>
+                  <tr><td><code>${name[1]}</code>, <code>${name[2,4]}</code></td><td>Character slice / range</td></tr>
+                  <tr><td><code>${(P)name}</code></td><td>Indirect — value of the variable named by <code>name</code></td></tr>
+                  <tr><td><code>${(f)var}</code></td><td>Split on newlines into an array</td></tr>
+                  <tr><td><code>${(z)var}</code></td><td>Split like shell words (quote-aware)</td></tr>
+                  <tr><td><code>${(q)var}</code></td><td>Shell-quote safely (used by the fzf widgets)</td></tr>
+                  <tr><td><code>${(j:, :)arr}</code></td><td>Join array elements with <code>, </code></td></tr>
+                  <tr><td><code>$((expr))</code></td><td>Arithmetic expansion (<code>$((2+2))</code>)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="brace-expansion">Brace expansion<a class="anchor" href="#brace-expansion">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Expression</th><th>Expands to</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>{a,b}</code></td><td><code>a b</code></td></tr>
+                  <tr><td><code>*.{jpg,png}</code></td><td>Every <code>.jpg</code> and <code>.png</code> file</td></tr>
+                  <tr><td><code>{1..10}</code></td><td><code>1 2 3 … 10</code></td></tr>
+                  <tr><td><code>{01..10}</code></td><td>Zero-padded <code>01 02 … 10</code></td></tr>
+                  <tr><td><code>{a..f}</code></td><td><code>a b c d e f</code></td></tr>
+                  <tr><td><code>backup_{01..05}.tar</code></td><td>Five numbered backup names</td></tr>
+                  <tr><td><code>{core,lib}/main.c</code></td><td><code>core/main.c lib/main.c</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="globbing">Globbing (filename generation)<a class="anchor" href="#globbing">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Pattern</th><th>Matches</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>*</code></td><td>Any string (not crossing <code>/</code>) — <em>includes dotfiles here (<code>glob_dots</code>)</em></td></tr>
+                  <tr><td><code>?</code></td><td>Exactly one character</td></tr>
+                  <tr><td><code>[abc]</code>, <code>[a-c]</code></td><td>One character from the set</td></tr>
+                  <tr><td><code>[^abc]</code></td><td>One character not in the set</td></tr>
+                  <tr><td><code>**/</code></td><td>Directories recursively (<code>**/*.log</code> — all logs, any depth)</td></tr>
+                  <tr><td><code>*(.)</code></td><td>Plain files only</td></tr>
+                  <tr><td><code>*(/)</code></td><td>Directories only</td></tr>
+                  <tr><td><code>*(N)</code></td><td>Null if nothing matches (no error)</td></tr>
+                  <tr><td><code>^*.txt</code></td><td>Negation — everything but <code>*.txt</code> <em>(needs <code>extendedglob</code>)</em></td></tr>
+                  <tr><td><code>*(m0)</code></td><td>Last modified today</td></tr>
+                  <tr><td><code>*(m-4)</code></td><td>Last modified &lt;4 days ago</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="glob-qualifiers">Glob qualifiers<a class="anchor" href="#glob-qualifiers">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Qualifier</th><th>Example</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>(.)</code></td><td><code>*(.)</code></td><td>Plain files (follow symlinks)</td></tr>
+                  <tr><td><code>(/)</code></td><td><code>src*(/)</code></td><td>Directories</td></tr>
+                  <tr><td><code>(@)</code></td><td><code>*(@)</code></td><td>Symlinks</td></tr>
+                  <tr><td><code>(N)</code></td><td><code>missing*(N)</code></td><td>Null glob — expand to nothing instead of erroring</td></tr>
+                  <tr><td><code>(D)</code></td><td><code>*(D)</code></td><td>Include dotfiles <em>(redundant here: <code>glob_dots</code> is set)</em></td></tr>
+                  <tr><td><code>(m0)</code></td><td><code>logs/*(m0)</code></td><td>Modified today</td></tr>
+                  <tr><td><code>(mh-1)</code></td><td><code>*(mh-1)</code></td><td>Modified within the last hour</td></tr>
+                  <tr><td><code>(L-10k)</code></td><td><code>*(L-10k)</code></td><td>Smaller than 10 KB</td></tr>
+                  <tr><td><code>(r)</code></td><td><code>*(r)</code></td><td>Readable by you</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="process-substitution">Process substitution<a class="anchor" href="#process-substitution">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Expression</th><th>Example</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>&lt;(COMMAND)</code></td>
+                    <td><code>grep "needle" &lt;(curl "https://haystack.io")</code></td>
+                    <td>Replace argument with <em>named pipe/FIFO</em> (read-only) with command output</td>
+                  </tr>
+                  <tr>
+                    <td><code>=(COMMAND)</code></td>
+                    <td><code>vim =(curl "https://haystack.io")</code></td>
+                    <td>Replace argument with <em>file</em> (writable) containing command output</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+      <section class="h2-section">
+        <h2 id="command-line">Command line<a class="anchor" href="#command-line">#</a></h2>
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="redirection">Redirection<a class="anchor" href="#redirection">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Expression</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>cmd &gt; file</code></td><td>Overwrite (truncate) <code>file</code></td></tr>
+                  <tr><td><code>cmd &gt;&gt; file</code></td><td>Append to <code>file</code></td></tr>
+                  <tr><td><code>cmd &gt;| file</code></td><td>Overwrite even with <code>noclobber</code></td></tr>
+                  <tr><td><code>cmd &amp;&gt; file</code></td><td>stdout <em>and</em> stderr into <code>file</code></td></tr>
+                  <tr><td><code>cmd 2&gt;/dev/null</code></td><td>Discard stderr</td></tr>
+                  <tr><td><code>cmd &gt;/dev/null 2&gt;&amp;1</code></td><td>Discard everything (order matters: <code>2&gt;&amp;1</code> after the file redirect)</td></tr>
+                  <tr><td><code>cmd 2&gt;&amp;1 | grep x</code></td><td>Send stderr into the pipe too</td></tr>
+                  <tr><td><code>echo "hi" &gt;&lt;&lt; "text"</code></td><td>Here-string — feed a string as stdin</td></tr>
+                  <tr><td><code>&lt;&lt;'EOF' … EOF</code></td><td>Here-doc, quoted delimiter = no expansion</td></tr>
+                  <tr><td><code>&lt;&lt;-EOF … EOF</code></td><td>Here-doc with leading tabs stripped</td></tr>
+                  <tr><td><code>exec &gt;log 2&gt;&amp;1</code></td><td>Redirect the shell's own output for the rest of the session</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="quoting">Quoting<a class="anchor" href="#quoting">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Expression</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>'single'</code></td><td>Fully literal — no expansion at all</td></tr>
+                  <tr><td><code>"double"</code></td><td>Expands <code>$var</code>, <code>$(cmd)</code>, <code>${…}</code> — not globs</td></tr>
+                  <tr><td><code>\$</code></td><td>Escape one character</td></tr>
+                  <tr><td><code>$'…\n…'</code></td><td>C-style escapes (<code>\n</code>, <code>\t</code>, <code>\x41</code>)</td></tr>
+                  <tr><td><code>~/x</code></td><td>Tilde expands to home at the start of a word</td></tr>
+                  <tr><td><code>=nvim</code></td><td>Expands to the full path of a command in <code>PATH</code> (<code>=nvim</code> → <code>/usr/bin/nvim</code>)</td></tr>
+                  <tr><td><code># comment</code></td><td>Comments in interactive input <em>(<code>interactive_comments</code> is set)</em></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="line-editing">Line editing (this shell)<a class="anchor" href="#line-editing">#</a></h3>
+            <div class="body">
+              <table class="-shortcuts -headers">
+                <thead>
+                  <tr><th>Keys</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>Ctrl+A</code></td><td>Beginning of line</td></tr>
+                  <tr><td><code>Ctrl+E</code></td><td>End of line</td></tr>
+                  <tr><td><code>Ctrl+B</code> / <code>Ctrl+F</code></td><td>Backward / forward one character</td></tr>
+                  <tr><td><code>Alt+B</code></td><td>Backward one word</td></tr>
+                  <tr><td><code>Alt+F</code></td><td><em>rebound</em> — Find File (see <a href="zsh-config.html#keybindings">keybindings</a>)</td></tr>
+                  <tr><td><code>Ctrl+W</code></td><td>Delete previous word</td></tr>
+                  <tr><td><code>Alt+D</code></td><td>Delete next word</td></tr>
+                  <tr><td><code>Ctrl+U</code></td><td>Delete to beginning of line</td></tr>
+                  <tr><td><code>Ctrl+K</code></td><td>Delete to end of line</td></tr>
+                  <tr><td><code>Ctrl+Y</code></td><td>Paste back the deleted text (yank)</td></tr>
+                  <tr><td><code>Ctrl+T</code></td><td>fzf — find file / directory</td></tr>
+                  <tr><td><code>Alt+C</code></td><td>fzf — jump to directory</td></tr>
+                  <tr><td><code>Alt+U</code> / <code>Alt+L</code></td><td>Uppercase / lowercase word</td></tr>
+                  <tr><td><code>Ctrl+_</code></td><td>Undo</td></tr>
+                  <tr><td><code>Ctrl+L</code></td><td>Clear screen</td></tr>
+                  <tr><td><code>Ctrl+G</code></td><td>Abort / cancel</td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                The keymap is <code>emacs</code> (<code>bindkey -e</code> at the top of
+                <code>60-keybindings.zsh</code>). All custom bindings and fzf widgets are
+                listed on the <a href="zsh-config.html#keybindings">keybindings page</a>.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="history">History &amp; Atuin<a class="anchor" href="#history">#</a></h3>
+            <div class="body">
+              <table class="-shortcuts -headers">
+                <thead>
+                  <tr><th>Keys / command</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>Ctrl+R</code></td><td>Atuin history search (bound in both <code>emacs</code> and <code>viins</code>)</td></tr>
+                  <tr><td><code>↑</code> / <code>↓</code></td><td>Atuin per-line history search (bound by <code>atuin init</code>)</td></tr>
+                  <tr><td><code>atuin search "…"</code></td><td>Search history from the CLI</td></tr>
+                  <tr><td><code>atuin stats</code></td><td>History statistics</td></tr>
+                  <tr><td><code>atuin import</code></td><td>Import history from other shells</td></tr>
+                </tbody>
+              </table>
+              <p>
+                Zsh itself keeps <strong>no history file</strong> in this config —
+                <code>HISTFILE</code> is unset and <code>share/append/inc_append/extended_history</code>
+                are all off, so Atuin is the single source of truth. <code>bang_hist</code> and
+                <code>hist_verify</code> are also off. Autosuggestions therefore fall back to the
+                completion engine as well as (empty) local history:
+                <code>ZSH_AUTOSUGGEST_STRATEGY=(history completion)</code>.
+              </p>
+              <p class="note">
+                Source of truth: <code>dotfiles/zsh/lib/10-options.zsh</code>.
+                Prefix a command with <code>nh</code> or <code>,</code> if you don't want it recorded.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="job-control">Job control<a class="anchor" href="#job-control">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Expression</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>cmd &amp;</code></td><td>Run in background</td></tr>
+                  <tr><td><code>Ctrl+Z</code></td><td>Suspend the foreground job</td></tr>
+                  <tr><td><code>jobs</code></td><td>List jobs (<code>%1</code> refers to the first)</td></tr>
+                  <tr><td><code>fg %1</code></td><td>Bring job 1 to the foreground</td></tr>
+                  <tr><td><code>bg %1</code></td><td>Resume job 1 in the background</td></tr>
+                  <tr><td><code>disown %1</code></td><td>Remove job from the table (survives shell exit)</td></tr>
+                  <tr><td><code>wait %1</code></td><td>Block until job finishes</td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                <code>notify</code> is set, so background jobs report their status immediately.
+                Beware: <code>Ctrl+Z</code> is rebound to the zoxide jump widget in this config —
+                suspend with <code>suspend</code> or rebind it
+                (<a href="zsh-config.html#keybindings">details</a>).
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="builtins">Useful builtins<a class="anchor" href="#builtins">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead>
+                  <tr><th>Builtin</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>whence -v name</code></td><td>Exactly where <code>name</code> resolves (alias, builtin, function, path)</td></tr>
+                  <tr><td><code>typeset -m '*pat*'</code></td><td>List parameters matching a pattern</td></tr>
+                  <tr><td><code>print -r -- "$x"</code></td><td>Print without escape/option processing (the zsh-safe <code>echo</code>)</td></tr>
+                  <tr><td><code>alias name</code> / <code>unalias name</code></td><td>Show / remove an alias</td></tr>
+                  <tr><td><code>exec zsh</code></td><td>Replace the shell (this config's <code>reload</code> alias)</td></tr>
+                  <tr><td><code>source file</code> / <code>. file</code></td><td>Run a file in the current shell</td></tr>
+                  <tr><td><code>autoload -Uz fn</code></td><td>Lazily load a function</td></tr>
+                  <tr><td><code>zmodload zsh/…</code></td><td>Load a module (e.g. <code>zsh/stat</code>, <code>zsh/zpty</code>)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="change-default-shell">Change default shell<a class="anchor" href="#change-default-shell">#</a></h3>
+            <div class="body">
+              <pre><code>chsh -s "$(which zsh)"</code></pre>
+            </div>
+          </section>
+
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-foot">
+      <p>Source: <a href="../dotfiles/zsh/">dotfiles/zsh/</a> ·
+         Related: <a href="aliases.html">aliases</a>,
+         <a href="zsh-config.html">config</a>,
+         <a href="functions.html">functions</a></p>
+    </footer>
+  </div>
+</body>
+</html>

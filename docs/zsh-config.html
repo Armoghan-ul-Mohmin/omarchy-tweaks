@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>my zsh config — omarchy-tweaks</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">omarchy-tweaks <span>shell docs</span></a>
+      <div class="nav-links">
+        <a href="zsh-cheatsheet.html">zsh</a>
+        <a href="aliases.html">aliases</a>
+        <a class="active" aria-current="page" href="zsh-config.html">config</a>
+        <a href="git-cheatsheet.html">git</a>
+        <a href="functions.html">functions</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="sheet">
+    <header class="page-head">
+      <h1>My <span class="title">zsh config</span></h1>
+      <p class="lede">
+        How <code>dotfiles/zsh/</code> is put together: the loader, every module,
+        environment variables, plugin wiring and the complete keybinding tables.
+        Managed by <a href="https://github.com/Armoghan-ul-Mohmin/plug">plug.zsh</a>.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <ul>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#testing">Testing &amp; installing</a></li>
+        <li><a href="#environment">Environment (00-env)</a></li>
+        <li><a href="#options">Options (10-options)</a></li>
+        <li><a href="#plugins">Plugins (20-plugins)</a></li>
+        <li><a href="#fzf-tab">fzf-tab (30-fzf-tab)</a></li>
+        <li><a href="#keybindings">Keybindings (60)</a></li>
+        <li><a href="#conventions">Conventions</a></li>
+      </ul>
+    </nav>
+
+    <main class="post-content">
+      <section class="h2-section">
+        <h2 id="architecture">Architecture<a class="anchor" href="#architecture">#</a></h2>
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="load-flow">Load flow<a class="anchor" href="#load-flow">#</a></h3>
+            <div class="body">
+              <p>
+                <code>.zshrc</code> is only an entry point — the real config lives in
+                <code>lib/*.zsh</code>, sourced in alphabetical order:
+              </p>
+              <pre><code># never run in non-interactive shells
+[[ $- != *i* ]] &amp;&amp; return
+
+# directory of this file — absolute and symlink-safe
+typeset -g ZSHRC_DIR="${${(%):-%x}:A:h}"
+
+# load modules in order
+for _zshrc_module in "$ZSHRC_DIR"/lib/*.zsh(N); do
+  source "$_zshrc_module"
+done
+
+# secrets last
+[[ -f "$HOME/.secrets.zsh" ]] &amp;&amp; source "$HOME/.secrets.zsh"</code></pre>
+              <table class="-headers">
+                <thead><tr><th>Module</th><th>Contains</th></tr></thead>
+                <tbody>
+                  <tr><td><code>.zshrc</code></td><td>Interactive guard, <code>ZSHRC_DIR</code> resolution, module loop, <code>~/.secrets.zsh</code></td></tr>
+                  <tr><td><code>00-env.zsh</code></td><td>Environment variables (editor, pager, fzf, plug, PATH, starship)</td></tr>
+                  <tr><td><code>10-options.zsh</code></td><td><code>setopt</code>s, Atuin-compatible history settings, autosuggest strategy</td></tr>
+                  <tr><td><code>20-plugins.zsh</code></td><td>plug.zsh install + plugins + tool inits + you-should-use</td></tr>
+                  <tr><td><code>30-fzf-tab.zsh</code></td><td>fzf-tab zstyles/previews + the fzf ZLE widgets</td></tr>
+                  <tr><td><code>40-aliases.zsh</code></td><td>Aliases only (<a href="aliases.html">cheatsheet</a>)</td></tr>
+                  <tr><td><code>50-functions.zsh</code></td><td>Gum-powered functions (<a href="functions.html">cheatsheet</a>)</td></tr>
+                  <tr><td><code>60-keybindings.zsh</code></td><td><code>bindkey -e</code>, <code>run-tui</code>, widgets, key bindings</td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                Numbered prefixes control load order — add a module by dropping
+                <code>NN-name.zsh</code> into <code>lib/</code>; nothing else changes.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="testing">Testing &amp; installing<a class="anchor" href="#testing">#</a></h3>
+            <div class="body">
+              <pre><code># test without touching ~/.zshrc
+ZDOTDIR=/path/to/omarchy-tweaks/dotfiles/zsh zsh -i
+zsh-dev                       # same thing, wrapper in bin/
+
+# install for real (symlink, never copy)
+ln -sf /path/to/omarchy-tweaks/dotfiles/zsh/.zshrc ~/.zshrc
+
+# day-to-day
+zshrc                         # pick a module, edit, optionally reload
+reload                        # exec zsh</code></pre>
+              <p class="note">
+                <code>ZSHRC_DIR</code> is exported, so <code>reload</code> and
+                <code>zshrc</code> keep working after a restart. Machine-specific values
+                (tokens, private env) belong in <code>~/.secrets.zsh</code>, sourced last.
+              </p>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+      <section class="h2-section">
+        <h2 id="modules">Modules<a class="anchor" href="#modules">#</a></h2>
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="environment">Environment — <code>00-env.zsh</code><a class="anchor" href="#environment">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Variable</th><th>Value / effect</th></tr></thead>
+                <tbody>
+                  <tr><td><code>EDITOR</code>, <code>VISUAL</code>, <code>SUDO_EDITOR</code></td><td><code>nvim</code></td></tr>
+                  <tr><td><code>PAGER</code>, <code>LESS</code>, <code>LESSHISTFILE</code></td><td><code>less</code>, <code>-FRX</code>, <code>-</code> (no less history)</td></tr>
+                  <tr><td><code>GPG_TTY</code></td><td>Current tty (GPG pinentry)</td></tr>
+                  <tr><td><code>BAT_THEME</code></td><td><code>Catppuccin Macchiato</code></td></tr>
+                  <tr><td><code>MANPAGER</code></td><td><code>col -bx | bat -l man -p</code> — manpages through bat</td></tr>
+                  <tr><td><code>FZF_DEFAULT_COMMAND</code></td><td><code>fd</code> (files, hidden, following, excluding <code>.git</code>/<code>node_modules</code>/<code>.venv</code>/<code>target</code>)</td></tr>
+                  <tr><td><code>FZF_DEFAULT_OPTS</code></td><td>Height 75%, reverse layout, rounded border, inline info, bat preview right 65%, Catppuccin colors</td></tr>
+                  <tr><td><code>FZF_CTRL_T_OPTS</code></td><td>Preview window right 65%, rounded, wrapped</td></tr>
+                  <tr><td><code>FZF_ALT_C_OPTS</code></td><td>eza tree preview for directories</td></tr>
+                  <tr><td><code>PLUG_JOBS</code> / <code>PLUG_QUIET</code> / <code>PLUG_COMPINIT</code></td><td>4 parallel installs / quiet / compinit handled by plug</td></tr>
+                  <tr><td><code>PLUG_MAX_LOG_SIZE</code> / <code>PLUG_OMZ_LIB</code></td><td>1 MiB logs / omz shims for <code>functions</code> + <code>clipboard</code></td></tr>
+                  <tr><td><code>PATH</code></td><td>Prepends <code>~/.omarchy-tweaks/bin</code></td></tr>
+                  <tr><td><code>STARSHIP_CONFIG</code></td><td><code>../starship/starship.toml</code> (repo copy, dev only)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="options">Options — <code>10-options.zsh</code><a class="anchor" href="#options">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><code>autocd</code></td><td>Typing a directory name <code>cd</code>s into it</td></tr>
+                  <tr><td><code>glob_dots</code></td><td><code>*</code> matches dotfiles</td></tr>
+                  <tr><td><code>numericglobsort</code></td><td><code>file10</code> after <code>file2</code></td></tr>
+                  <tr><td><code>correct</code></td><td>Suggests corrections for misspelled commands</td></tr>
+                  <tr><td><code>auto_menu</code> / <code>complete_in_word</code></td><td>Menu on second Tab / complete mid-word</td></tr>
+                  <tr><td><code>interactive_comments</code></td><td><code>#</code> starts a comment at the prompt</td></tr>
+                  <tr><td><code>notify</code></td><td>Background jobs report immediately</td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>unset HISTFILE</code></td><td>Zsh writes no history file — Atuin is the only store</td></tr>
+                  <tr><td><code>share_history</code>, <code>append_history</code>, <code>inc_append_history</code>, <code>extended_history</code></td><td>all off</td></tr>
+                  <tr><td><code>bang_hist</code>, <code>hist_verify</code></td><td>off — no <code>!!</code>, no confirm-before-<code>!</code></td></tr>
+                  <tr><td><code>ZSH_AUTOSUGGEST_STRATEGY</code></td><td><code>(history completion)</code> — completion fills the gap left by the empty local history</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="plugins">Plugins — <code>20-plugins.zsh</code><a class="anchor" href="#plugins">#</a></h3>
+            <div class="body">
+              <p>
+                plug.zsh is cloned on first run to
+                <code>~/.local/share/plug/plug.git</code>, then everything is declared with
+                <code>plug</code>:
+              </p>
+              <table class="-headers">
+                <thead><tr><th>Plugin</th><th>Declaration</th><th>Role</th></tr></thead>
+                <tbody>
+                  <tr><td>zsh-autosuggestions</td><td><code>plug defer … 100</code></td><td>Grey inline suggestions</td></tr>
+                  <tr><td>fzf-tab</td><td><code>plug defer … 500</code></td><td>Fuzzy Tab completion</td></tr>
+                  <tr><td>fast-syntax-highlighting</td><td><code>plug defer … 100</code></td><td>Syntax highlighting</td></tr>
+                  <tr><td>zsh-you-should-use</td><td><code>plug defer … 500</code></td><td>Suggests better aliases you already have</td></tr>
+                  <tr><td>omz command-not-found</td><td><code>plug omz …</code></td><td>“install package X” hints</td></tr>
+                  <tr><td>omz copyfile</td><td><code>plug omz …</code></td><td><code>copyfile</code> / <code>copydir</code> helpers</td></tr>
+                </tbody>
+              </table>
+              <p>
+                Tool inits run through <code>plug eval</code> — <strong>order matters</strong>:
+                fzf binds <code>Ctrl+R</code> first, then atuin overrides it.
+              </p>
+              <table class="-headers">
+                <thead><tr><th>Init</th><th>Command</th></tr></thead>
+                <tbody>
+                  <tr><td>starship</td><td><code>starship init zsh</code></td></tr>
+                  <tr><td>fzf</td><td><code>fzf --zsh</code> (Ctrl+T files, Alt+C dirs, Ctrl+R history — last one overridden)</td></tr>
+                  <tr><td>zoxide</td><td><code>zoxide init zsh</code> (powers <code>cd</code>/<code>j</code>/<code>ji</code>)</td></tr>
+                  <tr><td>atuin</td><td><code>atuin init zsh</code> (Ctrl+R search, arrow history)</td></tr>
+                </tbody>
+              </table>
+              <p>
+                Completions are generated once by plug: <code>atuin gen-completions</code>
+                and <code>zellij setup --generate-completion</code>.
+                <code>YSU_MESSAGE_POSITION=before</code> with a colored
+                <code>YSU_MESSAGE_FORMAT</code> tells you when an alias would be shorter.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="fzf-tab">fzf-tab — <code>30-fzf-tab.zsh</code><a class="anchor" href="#fzf-tab">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Scope</th><th>Preview / behaviour</th></tr></thead>
+                <tbody>
+                  <tr><td><code>complete:*:*</code> (default)</td><td><code>eza -lah --tree</code> for directories, <code>bat</code> (first 200 lines) for files</td></tr>
+                  <tr><td>all fzf-tab</td><td><code>--border=none --no-separator --height=98%</code>, preview right 65% wrapped</td></tr>
+                  <tr><td><code>ssh</code> / <code>ping</code> / <code>traceroute</code></td><td><code>getent hosts</code> or the <code>~/.ssh/config</code> block</td></tr>
+                  <tr><td>parameters (<code>-parameter-</code>, <code>-set-</code>, <code>-export-</code>)</td><td>Live value of the variable</td></tr>
+                  <tr><td><code>systemctl-*</code></td><td><code>systemctl status</code></td></tr>
+                  <tr><td><code>ip</code></td><td><code>ip addr show dev</code> / routes</td></tr>
+                  <tr><td><code>git log|diff|show|checkout</code></td><td><code>git show</code> for commits, branch log for branches</td></tr>
+                  <tr><td>archives (<code>tar</code>, <code>zip</code>, …)</td><td><code>unzip -l</code> / <code>tar -tf</code> — peek without extracting</td></tr>
+                  <tr><td>command names &amp; options</td><td>no preview pane (space for the list)</td></tr>
+                  <tr><td>colours</td><td><code>list-colors = LS_COLORS</code> (same as eza), group descriptions as <code>[…]</code></td></tr>
+                  <tr><td>inside tmux</td><td><code>ftb-tmux-popup</code>, minimum 160×30</td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                Preview scrolls with <code>Ctrl+D</code> / <code>Ctrl+U</code>.
+                Tab / Shift+Tab / Ctrl+Space stay fzf-tab defaults on purpose —
+                rebinding Tab to <em>toggle</em> would multi-select every item you pass
+                (fzf-tab runs fzf with <code>--multi</code>).
+              </p>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+      <section class="h2-section">
+        <h2 id="keybindings">Keybindings — <code>60-keybindings.zsh</code><a class="anchor" href="#keybindings">#</a></h2>
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="keymap">Keymap &amp; run-tui<a class="anchor" href="#keymap">#</a></h3>
+            <div class="body">
+              <p>
+                <code>bindkey -e</code> sets the <code>emacs</code> keymap as <code>main</code>
+                (some environments alias <code>main</code> to <code>viins</code> — this line is
+                what keeps bindings where you expect them). Every launcher widget goes through
+                <code>run-tui</code>, which hands the program the real tty, restores
+                <code>stty sane</code> afterwards and redraws the prompt.
+                <code>bin/keybind-help</code> shows all of this inside the shell
+                (<code>Alt+?</code> or <code>Alt+/</code>).
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="custom">Custom shortcuts<a class="anchor" href="#custom">#</a></h3>
+            <div class="body">
+              <table class="-shortcuts -headers">
+                <thead><tr><th>Keys</th><th>Widget</th><th>Does</th></tr></thead>
+                <tbody>
+                  <tr><td><code>Alt+H</code></td><td><code>hb-widget</code></td><td>Hastebin TUI</td></tr>
+                  <tr><td><code>Alt+Q</code></td><td><code>server-widget</code></td><td>Local server manager</td></tr>
+                  <tr><td><code>Alt+F</code></td><td><code>fzf-widget</code></td><td>Find file (<code>fd</code> + fzf + bat preview) → inserts path</td></tr>
+                  <tr><td><code>Alt+G</code></td><td><code>lazygit-widget</code></td><td>lazygit full-screen</td></tr>
+                  <tr><td><code>Alt+K</code></td><td><code>code-widget</code></td><td>VS Code</td></tr>
+                  <tr><td><code>Alt+N</code></td><td><code>nvim-widget</code></td><td>Neovim</td></tr>
+                  <tr><td><code>Alt+S</code></td><td><code>spf-widget</code></td><td>SuperFiles</td></tr>
+                  <tr><td><code>Alt+T</code></td><td><code>tij-widget</code></td><td>tmux session manager (<code>tij</code>)</td></tr>
+                  <tr><td><code>Alt+Z</code></td><td><code>zij-widget</code></td><td>zellij session manager (<code>zij</code>)</td></tr>
+                  <tr><td><code>Alt+?</code> / <code>Alt+/</code></td><td><code>keybind-widget</code></td><td>Keybind help TUI</td></tr>
+                  <tr><td><code>?</code></td><td><code>atuin-ai</code></td><td>Atuin AI inline</td></tr>
+                  <tr><td><code>Ctrl+R</code></td><td><code>atuin-search</code></td><td>Atuin history search (also bound in <code>viins</code>)</td></tr>
+                </tbody>
+              </table>
+              <p class="note warn">
+                <code>?</code> is bound in the emacs keymap, so pressing it opens
+                Atuin AI instead of inserting a question mark — use
+                <code>Ctrl+V ?</code> to type a literal one, or move the binding
+                (e.g. to <code>Alt+A</code>) in <code>60-keybindings.zsh</code>.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="ctrl-alt">Ctrl+Alt widgets<a class="anchor" href="#ctrl-alt">#</a></h3>
+            <div class="body">
+              <table class="-shortcuts -headers">
+                <thead><tr><th>Keys</th><th>Widget</th><th>Does</th></tr></thead>
+                <tbody>
+                  <tr><td><code>Ctrl+Alt+F</code></td><td><code>fzf_file_dir_picker</code></td><td>fzf over <code>fd</code> — inserts files, <code>cd</code>s into directories</td></tr>
+                  <tr><td><code>Ctrl+Alt+L</code></td><td><code>fzf_git_log_search</code></td><td>fzf over <code>git log</code> → inserts <code>git show &lt;hash&gt;</code></td></tr>
+                  <tr><td><code>Ctrl+Alt+V</code></td><td><code>fzf_shell_variables</code></td><td>fzf over env vars → inserts the value</td></tr>
+                  <tr><td><code>Ctrl+Alt+B</code></td><td><code>fzf_git_branch</code></td><td>fzf branch switcher (tracking branches created automatically)</td></tr>
+                  <tr><td><code>Ctrl+Z</code></td><td><code>fzf_zoxide_jump</code></td><td>interactive zoxide jump → runs <code>cd</code></td></tr>
+                </tbody>
+              </table>
+              <p class="note warn">
+                <code>Ctrl+Z</code> no longer suspends jobs — it runs the zoxide picker.
+                Suspend with <code>suspend</code>, or unbind <code>'^Z'</code> to get the
+                default back.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="defaults">Line editing &amp; fzf defaults<a class="anchor" href="#defaults">#</a></h3>
+            <div class="body">
+              <table class="-shortcuts -headers">
+                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr><td><code>Ctrl+A</code> / <code>Ctrl+E</code></td><td>Start / end of line</td></tr>
+                  <tr><td><code>Ctrl+W</code> / <code>Ctrl+U</code> / <code>Ctrl+K</code></td><td>Delete word back / to start / to end</td></tr>
+                  <tr><td><code>Ctrl+Y</code></td><td>Yank back deleted text</td></tr>
+                  <tr><td><code>Alt+B</code> / <code>Alt+D</code></td><td>Word back / kill word forward</td></tr>
+                  <tr><td><code>Alt+U</code> / <code>Alt+L</code></td><td>Uppercase / lowercase word</td></tr>
+                  <tr><td><code>Ctrl+T</code></td><td>fzf file widget (from <code>fzf --zsh</code>)</td></tr>
+                  <tr><td><code>Alt+C</code></td><td>fzf directory widget</td></tr>
+                  <tr><td><code>Tab</code> / <code>Shift+Tab</code></td><td>fzf-tab completion / previous</td></tr>
+                  <tr><td><code>Ctrl+Space</code></td><td>Multi-select inside fzf-tab</td></tr>
+                  <tr><td><code>Ctrl+D</code> / <code>Ctrl+U</code></td><td>Scroll the fzf-tab preview half a page</td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                Full line-editing reference: <a href="zsh-cheatsheet.html#line-editing">zsh cheatsheet → Line editing</a>.
+              </p>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+      <section class="h2-section">
+        <h2 id="conventions">Conventions<a class="anchor" href="#conventions">#</a></h2>
+        <div class="body h3-section-list">
+          <section class="h3-section">
+            <h3 id="house-rules">House rules<a class="anchor" href="#house-rules">#</a></h3>
+            <div class="body">
+              <ul>
+                <li>Aliases live in <code>40-aliases.zsh</code>, functions in <code>50-functions.zsh</code>.</li>
+                <li>Function naming: implementation <code>_name</code>, exposed through a public alias (<code>ports="_ports"</code>) so aliases behave like commands.</li>
+                <li>Anything interactive uses <code>gum</code> (input, choose, confirm, filter, table).</li>
+                <li><code>gum table</code> from a pipe must use <code>--print</code> — interactive table mode aborts when stdin is piped.</li>
+                <li>Inside functions call <code>command git</code> / <code>command du</code>… to bypass aliases like <code>du='_du'</code>.</li>
+                <li>Plugins are declared with <code>plug</code> only; tool inits with <code>plug eval</code>.</li>
+                <li>New keybinding = <code>zle -N</code> + <code>bindkey</code> + an entry in <code>bin/keybind-help</code>.</li>
+                <li>Secrets and private env go into <code>~/.secrets.zsh</code>, never into the repo.</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-foot">
+      <p>Sources: <a href="../dotfiles/zsh/.zshrc">.zshrc</a>,
+         <a href="../dotfiles/zsh/lib/">lib/*.zsh</a> ·
+         Tools: <code>zsh-dev</code>, <code>keybind-help</code>,
+         <code>zshrc</code>, <code>reload</code></p>
+    </footer>
+  </div>
+</body>
+</html>

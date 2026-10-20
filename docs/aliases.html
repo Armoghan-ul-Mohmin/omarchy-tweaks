@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>my aliases — omarchy-tweaks</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">omarchy-tweaks <span>shell docs</span></a>
+      <div class="nav-links">
+        <a href="zsh-cheatsheet.html">zsh</a>
+        <a class="active" aria-current="page" href="aliases.html">aliases</a>
+        <a href="zsh-config.html">config</a>
+        <a href="git-cheatsheet.html">git</a>
+        <a href="functions.html">functions</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="sheet">
+    <header class="page-head">
+      <h1>My <span class="title">aliases</span></h1>
+      <p class="lede">
+        Everything in <code>dotfiles/zsh/lib/40-aliases.zsh</code>, in load order.
+        Several aliases are thin wrappers around <code>_</code>-prefixed functions —
+        those are documented on the <a href="functions.html">functions page</a>.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <ul>
+        <li><a href="#navigation">Navigation &amp; directories</a></li>
+        <li><a href="#listing">Listing</a></li>
+        <li><a href="#editors">Editors &amp; replacements</a></li>
+        <li><a href="#typos">Typos &amp; help</a></li>
+        <li><a href="#sysinfo">System info</a></li>
+        <li><a href="#hashing">Hashing</a></li>
+        <li><a href="#applications">Applications</a></li>
+        <li><a href="#git-aliases">Git</a></li>
+        <li><a href="#shell">Shell</a></li>
+        <li><a href="#history-exclusions">History exclusions</a></li>
+        <li><a href="#misc">Miscellaneous</a></li>
+      </ul>
+    </nav>
+
+    <main class="post-content">
+      <section class="h2-section">
+        <div class="body h3-section-list">
+
+          <section class="h3-section">
+            <h3 id="navigation">Navigation &amp; directory shortcuts<a class="anchor" href="#navigation">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><code>..</code></td><td><code>cd ..</code></td><td></td></tr>
+                  <tr><td><code>...</code></td><td><code>cd ../..</code></td><td></td></tr>
+                  <tr><td><code>....</code></td><td><code>cd ../../..</code></td><td></td></tr>
+                  <tr><td><code>home</code></td><td><code>cd ~</code></td><td></td></tr>
+                  <tr><td><code>root</code></td><td><code>cd /</code></td><td></td></tr>
+                  <tr><td><code>back</code></td><td><code>cd -</code></td><td>Previous directory</td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>cd</code></td><td><code>z</code></td><td>zoxide — smart jump; learning enabled</td></tr>
+                  <tr><td><code>j</code></td><td><code>zoxide query</code></td><td>Print best match for a keyword</td></tr>
+                  <tr><td><code>ji</code></td><td><code>zoxide query -i</code></td><td>Interactive zoxide picker</td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>desktop</code></td><td><code>cd ~/Desktop</code></td><td></td></tr>
+                  <tr><td><code>downloads</code></td><td><code>cd ~/Downloads</code></td><td></td></tr>
+                  <tr><td><code>documents</code></td><td><code>cd ~/Documents</code></td><td></td></tr>
+                  <tr><td><code>pictures</code></td><td><code>cd ~/Pictures</code></td><td></td></tr>
+                  <tr><td><code>videos</code></td><td><code>cd ~/Videos</code></td><td></td></tr>
+                  <tr><td><code>music</code></td><td><code>cd ~/Music</code></td><td></td></tr>
+                  <tr><td><code>work</code></td><td><code>cd ~/Work</code></td><td></td></tr>
+                  <tr><td><code>github</code></td><td><code>cd ~/GitHub</code></td><td></td></tr>
+                  <tr><td><code>clone</code></td><td><code>cd ~/GitHub/Clone</code></td><td></td></tr>
+                  <tr><td><code>projects</code></td><td><code>cd ~/Projects</code></td><td></td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>~</code></td><td><code>home</code></td><td>Typing <code>~</code> alone jumps home</td></tr>
+                  <tr><td><code>/</code></td><td><code>root</code></td><td>Typing <code>/</code> alone jumps to <code>/</code></td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                Because <code>cd</code> is zoxide, plain <code>cd</code> with an absolute path
+                still works (zoxide falls back to zsh's built-in), and
+                <code>autocd</code> means typing a directory name navigates too.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="listing">File &amp; directory listing<a class="anchor" href="#listing">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><code>l</code></td><td><code>eza -lah --icons=auto --group-directories-first --git-ignore</code></td><td>Detailed, hides gitignored</td></tr>
+                  <tr><td><code>ll</code></td><td><code>eza -lah --icons=auto --group-directories-first</code></td><td>Detailed listing</td></tr>
+                  <tr><td><code>la</code></td><td><code>eza -a --icons=auto --group-directories-first</code></td><td>Include dotfiles</td></tr>
+                  <tr><td><code>ls</code></td><td><code>eza --icons=auto --group-directories-first</code></td><td>eza replaces ls everywhere</td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>lf</code></td><td><code>eza -lh --icons=always --only-files</code></td><td>Files only</td></tr>
+                  <tr><td><code>lh</code></td><td><code>eza -ld --icons=always .*(N)</code></td><td>Top-level dotfiles only</td></tr>
+                  <tr><td><code>lsd</code></td><td><code>eza -lh --icons=always --only-dirs</code></td><td>Directories only</td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                The real binaries are always one <code>command</code> away:
+                <code>command ls</code>, <code>command du</code> (functions rely on this too).
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="editors">Editors &amp; command replacements<a class="anchor" href="#editors">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th></tr></thead>
+                <tbody>
+                  <tr><td><code>nano</code></td><td><code>nvim</code></td></tr>
+                  <tr><td><code>vim</code></td><td><code>nvim</code></td></tr>
+                  <tr><td><code>vi</code></td><td><code>nvim</code></td></tr>
+                  <tr><td><code>emacs</code></td><td><code>nvim</code></td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>cat</code></td><td><code>bat</code></td></tr>
+                  <tr><td><code>htop</code></td><td><code>btop</code></td></tr>
+                  <tr><td><code>top</code></td><td><code>btop</code></td></tr>
+                  <tr><td><code>neofetch</code></td><td><code>fastfetch</code></td></tr>
+                  <tr><td><code>gitfetch</code></td><td><code>onefetch</code></td></tr>
+                  <tr><td><code>grep</code></td><td><code>grep --color=auto</code></td></tr>
+                  <tr><td><code>df</code></td><td><code>_df</code></td><td>gum table (function)</td></tr>
+                  <tr><td><code>du</code></td><td><code>_du</code></td><td>gum table with % of total (function)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="typos">Typo corrections &amp; help<a class="anchor" href="#typos">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th></tr></thead>
+                <tbody>
+                  <tr><td><code>sl</code></td><td><code>ls</code></td></tr>
+                  <tr><td><code>please</code></td><td><code>sudo</code></td></tr>
+                  <tr><td><code>help</code></td><td><code>man</code></td></tr>
+                  <tr><td><code>where</code></td><td><code>which</code></td></tr>
+                  <tr><td><code>tl</code></td><td><code>tldr</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="sysinfo">System information &amp; monitoring<a class="anchor" href="#sysinfo">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><code>mem</code></td><td><code>_mem</code></td><td>RAM/swap gum table</td></tr>
+                  <tr><td><code>cpuinfo</code></td><td><code>lscpu</code></td><td></td></tr>
+                  <tr><td><code>dl</code></td><td><code>curl -fLO</code></td><td>Download a file, keep name, fail on HTTP errors</td></tr>
+                  <tr><td><code>lanip</code></td><td><code>_lanip</code></td><td>Local address card</td></tr>
+                  <tr><td><code>wanip</code></td><td><code>_wanip</code></td><td>Public address card</td></tr>
+                  <tr><td><code>weather</code></td><td><code>curl -fsS wttr.in</code></td><td></td></tr>
+                  <tr><td><code>ports</code></td><td><code>_ports</code></td><td>Listening sockets table, optional filter arg</td></tr>
+                  <tr><td><code>portkill</code></td><td><code>_portkill</code></td><td>Kill a listener; picker if no port given</td></tr>
+                  <tr><td><code>ips</code></td><td><code>_ips</code></td><td>LAN + gateway + public (<code>-a</code> for all interfaces)</td></tr>
+                  <tr><td><code>path</code></td><td><code>_path</code></td><td>Numbered <code>PATH</code> table</td></tr>
+                  <tr><td><code>aliass</code></td><td><code>_alias</code></td><td>Numbered table of every alias</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="hashing">Hashing utilities<a class="anchor" href="#hashing">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th></tr></thead>
+                <tbody>
+                  <tr><td><code>md5</code></td><td><code>md5sum</code></td></tr>
+                  <tr><td><code>sha1</code></td><td><code>sha1sum</code></td></tr>
+                  <tr><td><code>sha256</code></td><td><code>sha256sum</code></td></tr>
+                  <tr><td><code>sha512</code></td><td><code>sha512sum</code></td></tr>
+                  <tr><td><code>hash</code></td><td><code>_hash</code></td><td>Interactive: pick file + algorithm with fzf/gum</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="applications">Applications<a class="anchor" href="#applications">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th></tr></thead>
+                <tbody>
+                  <tr><td><code>zj</code></td><td><code>zellij</code></td></tr>
+                  <tr><td><code>lg</code></td><td><code>lazygit</code></td></tr>
+                  <tr><td><code>tj</code></td><td><code>tmux</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="git-aliases">Git shortcuts<a class="anchor" href="#git-aliases">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><code>g</code></td><td><code>git</code></td><td></td></tr>
+                  <tr><td><code>gst</code></td><td><code>git status</code></td><td></td></tr>
+                  <tr><td><code>gs</code></td><td><code>git status -sb</code></td><td>Short + branch line</td></tr>
+                  <tr><td><code>gd</code></td><td><code>git diff</code></td><td></td></tr>
+                  <tr><td><code>gds</code></td><td><code>git diff --staged</code></td><td></td></tr>
+                  <tr><td><code>glog</code></td><td><code>git log</code></td><td></td></tr>
+                  <tr><td><code>glogp</code></td><td><code>git log --oneline --graph --decorate -20</code></td><td>Pretty graph</td></tr>
+                  <tr><td><code>gadd</code></td><td><code>git add</code></td><td></td></tr>
+                  <tr><td><code>gdiff</code></td><td><code>git diff</code></td><td></td></tr>
+                  <tr><td><code>gsh</code></td><td><code>git stash</code></td><td></td></tr>
+                  <tr><td><code>gshp</code></td><td><code>git stash pop</code></td><td></td></tr>
+                  <tr><td><code>gshl</code></td><td><code>git stash list</code></td><td></td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>gco</code></td><td><code>_gcheckout</code></td><td>Prompts for a branch name</td></tr>
+                  <tr><td><code>gfetch</code></td><td><code>_gfetch</code></td><td>Fetch with status feedback</td></tr>
+                  <tr><td><code>gpull</code></td><td><code>_gpull</code></td><td>Pull with status feedback</td></tr>
+                  <tr><td><code>gpush</code></td><td><code>_gpush</code></td><td>Push with status feedback</td></tr>
+                  <tr><td><code>gcommit</code></td><td><code>_gcommit</code></td><td>Message prompt if none given</td></tr>
+                  <tr><td><code>gcomit</code></td><td><code>_gcomit</code></td><td>Conventional-commit wizard (type/scope/body)</td></tr>
+                  <tr><td><code>gclone</code></td><td><code>_gclone</code></td><td>URL prompt if none given</td></tr>
+                  <tr><td><code>gbranch</code></td><td><code>_gbranch</code></td><td>gum picker of local branches</td></tr>
+                  <tr><td><code>gamend</code></td><td><code>_gamend</code></td><td>Amend prefilled with current message</td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                Details, examples and the <code>Ctrl+Alt+B/L</code> fuzzy widgets on the
+                <a href="git-cheatsheet.html">git cheatsheet</a>; the underlying functions on the
+                <a href="functions.html">functions page</a>.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="shell">Shell<a class="anchor" href="#shell">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><code>reload</code></td><td><code>exec zsh</code></td><td>Restart the shell (re-reads config)</td></tr>
+                  <tr><td><code>cls</code></td><td><code>clear</code></td><td></td></tr>
+                  <tr><td><code>mkdir</code></td><td><code>mkdir -p</code></td><td></td></tr>
+                  <tr><td><code>dirs</code></td><td><code>dirs -v</code></td><td>Numbered directory stack</td></tr>
+                </tbody>
+                <tbody>
+                  <tr><td><code>rm</code></td><td><code>remove</code></td><td>Asks for confirmation (<code>gum confirm</code>)</td></tr>
+                  <tr><td><code>new</code></td><td><code>new_file</code></td><td>Create with confirmation</td></tr>
+                  <tr><td><code>rn</code></td><td><code>rename</code></td><td>Rename with confirmation</td></tr>
+                  <tr><td><code>cp</code></td><td><code>copy</code></td><td>Copy with confirmation</td></tr>
+                  <tr><td><code>mv</code></td><td><code>move</code></td><td>Move with confirmation</td></tr>
+                  <tr><td><code>mkcd</code></td><td><code>_mkcd</code></td><td>Create directory and enter it (prompts if omitted)</td></tr>
+                </tbody>
+              </table>
+              <p class="note warn">
+                <code>rm</code>, <code>cp</code> and <code>mv</code> are interactive wrappers —
+                scripts should call <code>command rm</code> etc. (or use the functions' raw
+                behaviour only in a terminal).
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="history-exclusions">History exclusions<a class="anchor" href="#history-exclusions">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><code>nh</code></td><td><code>(a single space)</code></td><td>Prefix a command to keep it out of Atuin history</td></tr>
+                  <tr><td><code>,</code></td><td><code>(a single space)</code></td><td>Shorter version of <code>nh</code></td></tr>
+                </tbody>
+              </table>
+              <p class="note">
+                Example: <code>, vim ~/.secrets.zsh</code> — the leading space makes the
+                command invisible to history.
+              </p>
+            </div>
+          </section>
+
+          <section class="h3-section">
+            <h3 id="misc">Miscellaneous<a class="anchor" href="#misc">#</a></h3>
+            <div class="body">
+              <table class="-headers">
+                <thead><tr><th>Alias</th><th>Expands to</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td><code>edit</code></td><td><code>edit_file</code></td><td>Open files in <code>$EDITOR</code></td></tr>
+                  <tr><td><code>open</code></td><td><code>_open</code></td><td>xdg-open with default app</td></tr>
+                  <tr><td><code>here</code></td><td><code>_here</code></td><td>Open current dir with default app</td></tr>
+                  <tr><td><code>edit-here</code></td><td><code>_edit-here</code></td><td>Open current dir in VS Code</td></tr>
+                  <tr><td><code>bk</code></td><td><code>backup</code></td><td>Timestamped backup (<code>file.bak-YYYYmmdd-HHMMSS</code>)</td></tr>
+                  <tr><td><code>tmpdir</code></td><td><code>_tmpdir</code></td><td>Subshell in a temp dir, deleted on exit</td></tr>
+                  <tr><td><code>bigfiles</code></td><td><code>_bigfiles</code></td><td>20 largest files under a directory</td></tr>
+                  <tr><td><code>note</code></td><td><code>_note</code></td><td>Notes dashboard (new / search / recent)</td></tr>
+                  <tr><td><code>notes</code></td><td><code>_notes</code></td><td>Open notes.md in <code>$VISUAL</code></td></tr>
+                  <tr><td><code>zshrc</code></td><td><code>edit_zshrc</code></td><td>Pick a config module, edit, optionally reload</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-foot">
+      <p>Source: <a href="../dotfiles/zsh/lib/40-aliases.zsh">lib/40-aliases.zsh</a> ·
+         Related: <a href="functions.html">functions</a>,
+         <a href="git-cheatsheet.html">git</a>,
+         <a href="zsh-config.html">config</a></p>
+    </footer>
+  </div>
+</body>
+</html>
