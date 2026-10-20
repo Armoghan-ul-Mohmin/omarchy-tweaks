@@ -30,7 +30,7 @@ trap on_interrupt INT
 
 # Metadata
 AUTHOR="Armoghan-ul-Mohmin"
-VERSION="1.0.0"
+VERSION="1.0.1"
 URL="https://github.com/Armoghan-ul-Mohmin/omarchy-tweaks.git"
 SCRIPT_NAME="bootstrap.sh"
 LOG_DATE_FORMAT="+%Y-%m-%d %H:%M:%S"
@@ -136,7 +136,6 @@ readonly PACMAN_PACKAGES=(
     "python-pip"
     "python-pipx"
     "python-pytest"
-    "qemu-desktop"
     "qemu-full"
     "qemu-user-static-binfmt"
     "qrencode"
@@ -843,7 +842,10 @@ remove_mise() {
     local removed=0
     for b in "${MISE[@]}"; do
         if [[ -e "$b" || -L "$b" ]]; then
-            rm -rf -- "$b" 2>/dev/null && ((removed++)) && msg_debug "Removed: $b"
+            if rm -rf -- "$b" 2>/dev/null; then
+                ((++removed))
+                msg_debug "Removed: $b"
+            fi
         fi
     done
     shopt -u nullglob
@@ -961,7 +963,7 @@ install_webapps() {
         IFS='|' read -r app_name app_url icon_file <<< "$entry"
         [[ -n "$app_name" && -n "$app_url" ]] || {
             msg_warning "Invalid WebApp entry: $entry"
-            ((failed++))
+            ((++failed))
             continue
         }
 
@@ -970,10 +972,10 @@ install_webapps() {
             local cyberchef_desktop="$PROJECT_DIR/config/cyberchef.desktop"
             if [[ ! -f "$cyberchef_desktop" ]]; then
                 msg_error "Missing: $cyberchef_desktop"
-                ((failed++))
+                ((++failed))
                 continue
             fi
-            symlink_or_backup "$cyberchef_desktop" "$app_dir/cyberchef.desktop" || ((failed++))
+            symlink_or_backup "$cyberchef_desktop" "$app_dir/cyberchef.desktop" || ((++failed))
             continue
         fi
 
@@ -982,7 +984,7 @@ install_webapps() {
             icon_path="$PROJECT_DIR/assets/$icon_file"
             if [[ ! -f "$icon_path" ]]; then
                 msg_error "Icon missing for $app_name: $icon_path"
-                ((failed++))
+                ((++failed))
                 continue
             fi
         fi
@@ -993,7 +995,7 @@ install_webapps() {
         else
             msg_error "Failed: $app_name"
             printf '%s\n' "$out" >&2
-            ((failed++))
+            ((++failed))
         fi
     done
 
@@ -1026,16 +1028,16 @@ install_plugins() {
     for p in "${OMARCHY_PLUGINS[@]}"; do
         IFS='|' read -r plugin_name plugin_url plugin_desc <<< "$p"
         [[ -n "$plugin_name" && -n "$plugin_url" ]] || continue
-        ((idx++))
+        ((++idx))
 
         local title="${idx}/${total}  ${plugin_name}"
         [[ -n "$plugin_desc" ]] && title+=" — ${plugin_desc}"
 
         if run_spinner "$title" omarchy-plugin-add "$plugin_url"; then
-            ((ok++))
+            ((++ok))
             gum style --foreground "#a6e3a1" --bold --padding "0 2" "✓  ${plugin_name}"
         else
-            ((fail++))
+            ((++fail))
             gum style --foreground "#f38ba8" --bold --padding "0 2" "✗  ${plugin_name}"
         fi
     done
@@ -1068,6 +1070,7 @@ install_ollama_models() {
             msg_warning "Ollama install skipped"
             return 1
         }
+        require_cmd curl "curl" || return 1
         if run_spinner "${NF_SERVER}  Installing Ollama..." bash -c 'curl -fsSL https://ollama.com/install.sh | sh'; then
             msg_success "Ollama installed"
         else
@@ -1203,69 +1206,70 @@ setup_docker_containers() {
     section "Docker Containers ${NF_SERVER}"
     require_cmd docker "docker" || return 1
 
-    local dc=""
+    local -a dc=()
     if command -v docker-compose >/dev/null 2>&1; then
-        dc="docker-compose"
+        dc=(docker-compose)
     elif docker compose version >/dev/null 2>&1; then
-        dc="docker compose"
+        dc=(docker compose)
     else
         msg_error "docker-compose or 'docker compose' not found"
         return 1
     fi
-    msg_debug "Using: $dc"
+    msg_debug "Using: ${dc[*]}"
 
     local atuin_ai="$PROJECT_DIR/containers/atuin"
     local open_webui="$PROJECT_DIR/containers/open-webui"
     local outline="$PROJECT_DIR/containers/outline"
     local snapotter="$PROJECT_DIR/containers/snapotter"
 
-    # Atuin
-    confirm "Setup Atuin-AI container?" true || { msg_warning "Atuin-AI skipped"; }
-    if confirm "Setup Atuin-AI container?" true 2>/dev/null; then
-        true
-    fi
-    # simpler: run if confirmed
+    # Atuin-AI
     if confirm "Setup Atuin-AI container?" true; then
-        [[ -d "$atuin_ai" ]] || { msg_error "Missing: $atuin_ai"; return 1; }
-        local cfg="$HOME/.config/atuin-ai-server"
-        ensure_dir "$cfg"
-        [[ -s "$cfg/config.toml" ]] && backup_path "$cfg/config.toml"
-        symlink_or_backup "$PROJECT_DIR/config/atuin-ai-server.toml" "$cfg/config.toml" || return 1
-        if run_spinner "${NF_SERVER}  Starting atuin-ai..." $dc -f "$atuin_ai/docker-compose.yml" up -d; then
-            msg_success "Atuin-AI up"
+        if [[ ! -d "$atuin_ai" ]]; then
+            msg_warning "Missing: $atuin_ai (skipped)"
         else
-            msg_error "Atuin-AI failed"
-            return 1
+            local cfg="$HOME/.config/atuin-ai-server"
+            ensure_dir "$cfg"
+            [[ -s "$cfg/config.toml" ]] && backup_path "$cfg/config.toml"
+            if symlink_or_backup "$PROJECT_DIR/config/atuin-ai-server.toml" "$cfg/config.toml"; then
+                if run_spinner "${NF_SERVER}  Starting atuin-ai..." "${dc[@]}" -f "$atuin_ai/docker-compose.yml" up -d; then
+                    msg_success "Atuin-AI up"
+                else
+                    msg_error "Atuin-AI failed"
+                fi
+            fi
         fi
     fi
 
+    # Open-WebUI
     if confirm "Setup Open-WebUI container?" true; then
-        [[ -d "$open_webui" ]] || { msg_error "Missing: $open_webui"; return 1; }
-        if run_spinner "${NF_SERVER}  Starting open-webui..." $dc -f "$open_webui/docker-compose.yml" up -d; then
+        if [[ ! -d "$open_webui" ]]; then
+            msg_warning "Missing: $open_webui (skipped)"
+        elif run_spinner "${NF_SERVER}  Starting open-webui..." "${dc[@]}" -f "$open_webui/docker-compose.yml" up -d; then
             msg_success "Open-WebUI up"
         else
             msg_error "Open-WebUI failed"
-            return 1
         fi
     fi
 
+    # Outline
     if confirm "Setup Outline container?" false; then
-        [[ -d "$outline" ]] || { msg_error "Missing: $outline"; return 1; }
-        if run_spinner "${NF_SERVER}  Starting outline..." $dc -f "$outline/docker-compose.yml" up -d; then
+        if [[ ! -d "$outline" ]]; then
+            msg_warning "Missing: $outline (skipped)"
+        elif run_spinner "${NF_SERVER}  Starting outline..." "${dc[@]}" -f "$outline/docker-compose.yml" up -d; then
             msg_success "Outline up"
         else
             msg_error "Outline failed"
-            return 1
         fi
     fi
 
+    # SnapOtter
     if confirm "Setup Snapotter container?" false; then
-        [[ -d "$snapotter" ]] || { msg_error "Missing: $snapotter"; return 1; }
-        if run_spinner "${NF_SERVER}  Starting snapotter..." $dc -f "$snapotter/docker-compose.yml" up -d; then
+        if [[ ! -d "$snapotter" ]]; then
+            msg_warning "Missing: $snapotter (skipped)"
+        elif run_spinner "${NF_SERVER}  Starting snapotter..." "${dc[@]}" -f "$snapotter/docker-compose.yml" up -d; then
             msg_success "Snapotter up"
         else
             msg_error "Snapotter failed"
-            return 1
         fi
     fi
 }
@@ -1349,6 +1353,41 @@ setup_omarchy_overwrites() {
     done
 }
 
+
+# ======================================================= #
+# Bins (symlink bin/* into ~/.local/bin)
+# ======================================================= #
+
+setup_bins() {
+    section "Custom Bin Utilities ${NF_TERMINAL}"
+    local src_dir="$PROJECT_DIR/bin"
+    local dst_dir="$HOME/.local/bin"
+
+    [[ -d "$src_dir" ]] || { msg_warning "Missing: $src_dir"; return 0; }
+
+    confirm "Symlink custom utilities from bin/ into ~/.local/bin?" true || {
+        msg_warning "Bin symlink skipped"
+        return 0
+    }
+
+    ensure_dir "$dst_dir"
+
+    shopt -s nullglob
+    local -a scripts=("$src_dir"/*)
+    shopt -u nullglob
+
+    (( ${#scripts[@]} > 0 )) || { msg_warning "No utilities found in $src_dir"; return 0; }
+
+    local f name linked=0
+    for f in "${scripts[@]}"; do
+        [[ -f "$f" ]] || continue
+        name="$(basename -- "$f")"
+        if symlink_or_backup "$f" "$dst_dir/$name"; then
+            ((++linked))
+        fi
+    done
+    msg_success "Symlinked $linked utility(ies) into $dst_dir"
+}
 
 # ======================================================= #
 # Dotfiles (Git, global hooks, etc.)
@@ -1454,6 +1493,56 @@ setup_dotfiles() {
             msg_error "Failed to link Zsh config"
         fi
 
+        # ~/.omarchy-tweaks -> repo (PATH entry in 00-env.zsh + menu/docs links)
+        local omarchy_tweaks_link="$HOME/.omarchy-tweaks"
+        if [[ "$PROJECT_DIR" != "$omarchy_tweaks_link" ]]; then
+            if symlink_or_backup "$PROJECT_DIR" "$omarchy_tweaks_link"; then
+                msg_success "Linked: $omarchy_tweaks_link -> $PROJECT_DIR"
+            else
+                msg_warning "Failed to link: $omarchy_tweaks_link"
+            fi
+        fi
+
+        # Empty secrets file sourced last by .zshrc
+        local secrets="$HOME/.secrets.zsh"
+        if [[ ! -f "$secrets" ]]; then
+            if printf '# Private environment for zsh (sourced last by .zshrc)\n' > "$secrets"; then
+                chmod 600 "$secrets"
+                msg_success "Created: $secrets (mode 600)"
+            else
+                msg_warning "Failed to create: $secrets"
+            fi
+        else
+            msg_info "Exists: $secrets"
+        fi
+
+        # Auto-launch zsh from interactive bash (optional, own confirm)
+        local bashrc="$HOME/.bashrc"
+        if confirm "Make interactive bash auto-launch zsh (~/.bashrc)?" false; then
+            if [[ -f "$bashrc" ]]; then
+                backup_path "$bashrc" || msg_warning "Failed to backup: $bashrc"
+            fi
+
+            if cat > "$bashrc" <<'BASHRC_EOF'
+# If not running interactively, don't do anything (leave this at the top of this file)
+[[ $- != *i* ]] && return
+
+# Auto-launch zsh when bash is the interactive login shell
+if command -v zsh &> /dev/null; then
+    if [[ $(ps --no-header --pid=$PPID --format=comm) != "zsh" && -z ${BASH_EXECUTION_STRING} && ${SHLVL} == 1 ]]
+    then
+        shopt -q login_shell && LOGIN_OPTION='--login' || LOGIN_OPTION=''
+        exec zsh $LOGIN_OPTION
+    fi
+fi
+BASHRC_EOF
+            then
+                msg_success "Updated: $bashrc to auto-launch zsh"
+            else
+                msg_error "Failed to update: $bashrc"
+            fi
+        fi
+
         # Add Learn Menu Entries
         if [[ -f "$menu_file" ]]; then
             # Create a temporary file next to the original
@@ -1510,7 +1599,7 @@ setup_dotfiles() {
                 )
             ' "$menu_file" > "$tmp_file"; then
                 # Replace the original only after successful JSON processing
-                if cat "$tmp_file" > "$menu_file"; then
+                if mv -f -- "$tmp_file" "$menu_file"; then
                     msg_info "Omarchy Tweaks menu entries updated"
                 else
                     msg_error "Failed to update menu file"
@@ -1522,8 +1611,8 @@ setup_dotfiles() {
                 rm -f "$tmp_file"
                 return 1
             fi
-
-            command rm -f "$tmp_file"
+        else
+            msg_warning "Menu file not found: $menu_file (menu entries skipped)"
         fi
     else
         msg_warning "Zsh config setup skipped"
@@ -1550,7 +1639,8 @@ show_menu() {
 
     printf '\n'
 
-    local choice
+    # Prefix every entry with a stable numeric id so the case below never drifts.
+    local choice id
     choice="$(gum choose \
         --header "${NF_GEAR}  Select action (Enter to run)" \
         --cursor="${NF_ARROW} " \
@@ -1570,34 +1660,38 @@ show_menu() {
         "12. Containers: Setup (Atuin/OpenWebUI/Outline/SnapOtter)" \
         "13. Directories: Create (Github/Projects/.ISO/.VM)" \
         "14. Bins: Symlink custom bin/" \
-        "15. Dotfiles: Setup (Git/config/hooks)" \
+        "15. Dotfiles: Setup (Git/Atuin/Starship/Zsh)" \
         "16. Omarchy: Overwrite system scripts" \
         "17. View bootstrap.log" \
         "18. Show Version" \
         "19. Toggle Debug (current: ${DEBUG})" \
         "0. Exit")" || return 1
 
-    case "$choice" in
-        *"1. Full"*) run_full ;;
-        *"2. System"*) snapshot; pause ;;
-        *"3. Cleanup"*)
-            remove_packages; remove_tui; remove_webapps; remove_mise; pause
-            ;;
-        *"4. Packages"*)
-            install_pacman_packages; install_aur_packages; pause
-            ;;
-        *"5. Install: WebApps"*) install_webapps; pause ;;
-        *"6. Install: Omarchy Plugins"*) install_plugins; pause ;;
-        *"7. Ollama"*) install_ollama_models; pause ;;
-        *"8. AI: Claude"*) setup_claude; pause ;;
-        *"9. AI: OpenCode"*) setup_opencode; pause ;;
-        *"10. AI: Codex"*) setup_codex; pause ;;
-        *"11. Omniroute"*) install_omniroute; pause ;;
-        *"12. Containers"*) setup_docker_containers; pause ;;
-        *"13. Directories"*) create_dirs; pause ;;
-        *"14. Dotfiles"*) setup_dotfiles; pause ;;
-        *"15. Omarchy"*) setup_omarchy_overwrites; pause ;;
-        *"16. View"*)
+    id="${choice%%.*}"
+    if [[ ! "$id" =~ ^[0-9]+$ ]]; then
+        msg_warning "Invalid choice"
+        show_menu
+        return
+    fi
+
+    case "$id" in
+        1) run_full ;;
+        2) snapshot; pause ;;
+        3) remove_packages; remove_tui; remove_webapps; remove_mise; pause ;;
+        4) install_pacman_packages; install_aur_packages; pause ;;
+        5) install_webapps; pause ;;
+        6) install_plugins; pause ;;
+        7) install_ollama_models; pause ;;
+        8) setup_claude; pause ;;
+        9) setup_opencode; pause ;;
+        10) setup_codex; pause ;;
+        11) install_omniroute; pause ;;
+        12) setup_docker_containers; pause ;;
+        13) create_dirs; pause ;;
+        14) setup_bins; pause ;;
+        15) setup_dotfiles; pause ;;
+        16) setup_omarchy_overwrites; pause ;;
+        17)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -1605,11 +1699,11 @@ show_menu() {
             fi
             pause
             ;;
-        *"18. Show"*)
+        18)
             printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
             pause
             ;;
-        *"19. Toggle"*)
+        19)
             if (( DEBUG == 0 )); then
                 DEBUG=1
                 trap '__debug_trace' DEBUG
@@ -1621,7 +1715,7 @@ show_menu() {
             fi
             pause
             ;;
-        *"0. Exit"*) exit 0 ;;
+        0) exit 0 ;;
         *) msg_warning "Invalid choice" ;;
     esac
 
@@ -1681,6 +1775,7 @@ run_full() {
     banner
     section "Containers & Customizations"
     setup_docker_containers || msg_warning "Containers had issues"
+    setup_bins || msg_warning "Bin symlinks had issues"
     setup_omarchy_overwrites || msg_warning "Omarchy overwrites had issues"
 
     banner

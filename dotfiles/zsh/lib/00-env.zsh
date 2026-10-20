@@ -48,9 +48,3 @@ export PLUG_QUIET=1
 export PLUG_COMPINIT=1
 export PLUG_MAX_LOG_SIZE=1048576
 export PLUG_OMZ_LIB='functions clipboard'
-
-# path
-export PATH="$HOME/.omarchy-tweaks/bin:$PATH"
-
-# Starship — config lives next to these dotfiles (For Developement Only)
-export STARSHIP_CONFIG="${ZSHRC_DIR:h}/starship/starship.toml"
