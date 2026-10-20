@@ -1291,39 +1291,6 @@ create_dirs() {
     done
 }
 
-setup_custom_bin() {
-    section "Custom Bin Symlinks ${NF_TERMINAL}"
-    local custom_bin="$PROJECT_DIR/bin"
-    [[ -d "$custom_bin" ]] || { msg_error "Missing: $custom_bin"; return 1; }
-    ensure_dir "$HOME_DIR/.local/bin"
-
-    confirm "Symlink all files from bin/ to ~/.local/bin/?" true || {
-        msg_warning "Custom bin skipped"
-        return 0
-    }
-
-    shopt -s nullglob
-    local f linked=0
-    for f in "$custom_bin"/*; do
-        [[ -f "$f" ]] || continue
-        local base
-        base="$(basename -- "$f")"
-        local dst="$HOME_DIR/.local/bin/$base"
-        if [[ -e "$dst" || -L "$dst" ]]; then
-            backup_path "$dst" || continue
-        fi
-        if ln -sf -- "$f" "$dst"; then
-            ((linked++))
-            msg_debug "Linked: $base"
-        else
-            msg_error "Failed: $base"
-        fi
-    done
-    shopt -u nullglob
-    chmod +x "$HOME_DIR/.local/bin"/* 2>/dev/null || true
-    msg_success "Custom bin linked ($linked files)"
-}
-
 setup_omarchy_overwrites() {
     section "Omarchy Script Overwrites ${NF_SETTINGS}"
     local custom_scripts="$PROJECT_DIR/scripts"
@@ -1470,6 +1437,98 @@ setup_dotfiles() {
         msg_warning "Starship config setup skipped"
     fi
 
+    # Zsh Config
+    if confirm "Setup Zsh config (~/.zshrc)?" false; then
+        local src="$dotfiles_dir/zsh/.zshrc"
+        local dst="$HOME/.zshrc"
+        local docs="$dotfiles_dir/docs"
+        local menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
+
+        command_exists zsh || msg_warning "Missing: zsh (shell)"
+        [[ -f "$src" ]] || { msg_warning "Missing: $src"; return 0; }
+        ensure_dir "$(dirname -- "$dst")"
+        [[ -e "$dst" || -L "$dst" ]] && backup_path "$dst"
+        if symlink_or_backup "$src" "$dst"; then
+            msg_success "Zsh config linked"
+        else
+            msg_error "Failed to link Zsh config"
+        fi
+
+        # Add Learn Menu Entries
+        if [[ -f "$menu_file" ]]; then
+            # Create a temporary file next to the original
+            tmp_file=$(mktemp "${menu_file}.XXXXXX") || {
+                msg_error "Failed to create temporary file"
+                return 1
+            }
+
+            # Merge entries into the existing JSON without overwriting existing keys
+            if jq --arg home "$HOME" '
+                def entries($home): {
+                    "learn.Omarchy-Tweaks": {
+                        "icon": "󰮯",
+                        "label": "Omarchy Tweaks"
+                    },
+                    "learn.Omarchy-Tweaks.Tweaks": {
+                        "icon": "󰮯",
+                        "label": "Tweaks",
+                        "action": "omarchy-launch-webapp file://\($home)/.omarchy-tweaks/docs/index.html"
+                    },
+                    "learn.Omarchy-Tweaks.Zsh": {
+                        "icon": "󰆍",
+                        "label": "Zsh",
+                        "action": "omarchy-launch-webapp file://\($home)/.omarchy-tweaks/docs/zsh-cheatsheet.html"
+                    },
+                    "learn.Omarchy-Tweaks.aliases": {
+                        "icon": "󰌌",
+                        "label": "Aliases",
+                        "action": "omarchy-launch-webapp file://\($home)/.omarchy-tweaks/docs/aliases.html"
+                    },
+                    "learn.Omarchy-Tweaks.config": {
+                        "icon": "󰌌",
+                        "label": "Zsh Config",
+                        "action": "omarchy-launch-webapp file://\($home)/.omarchy-tweaks/docs/zsh-config.html"
+                    },
+                    "learn.Omarchy-Tweaks.git": {
+                        "icon": "󰊢",
+                        "label": "Git",
+                        "action": "omarchy-launch-webapp file://\($home)/.omarchy-tweaks/docs/git-cheatsheet.html"
+                    },
+                    "learn.Omarchy-Tweaks.functions": {
+                        "icon": "󰌌",
+                        "label": "Zsh Functions",
+                        "action": "omarchy-launch-webapp file://\($home)/.omarchy-tweaks/docs/functions.html"
+                    }
+                };
+
+                entries($home) as $new
+                | reduce ($new | to_entries[]) as $entry (
+                    .;
+                    if has($entry.key) then .
+                    else . + {($entry.key): $entry.value}
+                    end
+                )
+            ' "$menu_file" > "$tmp_file"; then
+                # Replace the original only after successful JSON processing
+                if cat "$tmp_file" > "$menu_file"; then
+                    msg_info "Omarchy Tweaks menu entries updated"
+                else
+                    msg_error "Failed to update menu file"
+                    rm -f "$tmp_file"
+                    return 1
+                fi
+            else
+                msg_error "Invalid JSON or failed to process menu file"
+                rm -f "$tmp_file"
+                return 1
+            fi
+
+            command rm -f "$tmp_file"
+        fi
+    else
+        msg_warning "Zsh config setup skipped"
+    fi
+
     msg_info "Dotfiles setup complete (only items you confirmed were applied)"
 }
 
@@ -1536,10 +1595,9 @@ show_menu() {
         *"11. Omniroute"*) install_omniroute; pause ;;
         *"12. Containers"*) setup_docker_containers; pause ;;
         *"13. Directories"*) create_dirs; pause ;;
-        *"14. Bins"*) setup_custom_bin; pause ;;
-        *"15. Dotfiles"*) setup_dotfiles; pause ;;
-        *"16. Omarchy"*) setup_omarchy_overwrites; pause ;;
-        *"17. View"*)
+        *"14. Dotfiles"*) setup_dotfiles; pause ;;
+        *"15. Omarchy"*) setup_omarchy_overwrites; pause ;;
+        *"16. View"*)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -1623,10 +1681,12 @@ run_full() {
     banner
     section "Containers & Customizations"
     setup_docker_containers || msg_warning "Containers had issues"
-    setup_custom_bin || msg_warning "Custom bin had issues"
     setup_omarchy_overwrites || msg_warning "Omarchy overwrites had issues"
 
     banner
+    section "Dotfiles"
+    setup_dotfiles || msg_warning "Dotfiles setup had issues"
+
     printf '\n'
     gum style \
         --foreground "#a6e3a1" \
@@ -1638,7 +1698,6 @@ run_full() {
     printf '\n'
     msg_info "Logs: $LOG_FILE"
     msg_info "Project: $PROJECT_DIR"
-    pause "Done"
 }
 
 # ======================================================= #
