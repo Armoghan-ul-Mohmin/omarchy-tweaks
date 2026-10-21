@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FILE="$HOME/.config/omarchy/plugins/io.github.maajix.spotlight/Spotlight.qml"
+BACKUP="$FILE.bak"
+OLD_OPACITY="0.62"
+NEW_OPACITY="0.90"
+
+# ─────────────────────────────────────────────
+# Colors / UI
+# ─────────────────────────────────────────────
+
+if ! command -v gum &>/dev/null; then
+    echo "Error: gum is not installed."
+    exit 1
+fi
+
+gum style \
+    --border double \
+    --border-foreground 212 \
+    --padding "1 2" \
+    --margin "1" \
+    "Maajix Spotlight Appearance Fixer" \
+    "" \
+    "Customize the Spotlight glass background" \
+    "opacity without changing other settings."
+
+echo
+
+# ─────────────────────────────────────────────
+# Check plugin
+# ─────────────────────────────────────────────
+
+if [[ ! -f "$FILE" ]]; then
+    gum style \
+        --foreground 196 \
+        "✗ Spotlight plugin file not found." \
+        "$FILE"
+    exit 1
+fi
+
+# ─────────────────────────────────────────────
+# Detect current state
+# ─────────────────────────────────────────────
+
+if grep -Eq \
+    '^[[:space:]]*readonly property color glassBackground: Util\.alpha\(Color\.menu\.background, 0\.90\)' \
+    "$FILE"; then
+
+    gum style \
+        --foreground 82 \
+        "✓ Spotlight opacity is already set to 0.90."
+
+    echo
+    gum style --foreground 240 "No changes made."
+    exit 0
+fi
+
+if ! grep -Eq \
+    '^[[:space:]]*readonly property color glassBackground: Util\.alpha\(Color\.menu\.background, 0\.62\)' \
+    "$FILE"; then
+
+    gum style \
+        --foreground 196 \
+        "✗ Expected opacity value 0.62 was not found." \
+        "" \
+        "The plugin may have changed after an update." \
+        "No changes were made."
+    exit 1
+fi
+
+gum style \
+    --border rounded \
+    --border-foreground 240 \
+    --padding "1 2" \
+    "Current opacity: $OLD_OPACITY" \
+    "Target opacity:  $NEW_OPACITY"
+
+echo
+
+# ─────────────────────────────────────────────
+# Confirmation
+# ─────────────────────────────────────────────
+
+gum style \
+    --foreground 214 \
+    "⚠ Higher opacity means less wallpaper shows through."
+
+echo
+
+if ! gum confirm "Change Spotlight glass opacity to 0.90?"; then
+    gum style --foreground 240 "Cancelled."
+    exit 0
+fi
+
+# ─────────────────────────────────────────────
+# Create backup
+# ─────────────────────────────────────────────
+
+if [[ ! -f "$BACKUP" ]]; then
+    cp -p "$FILE" "$BACKUP"
+    gum style --foreground 82 "✓ Backup created: $BACKUP"
+else
+    if gum confirm "Backup already exists. Replace it with the current file?"; then
+        cp -p "$FILE" "$BACKUP"
+        gum style --foreground 82 "✓ Backup updated."
+    else
+        gum style --foreground 214 "Keeping existing backup."
+    fi
+fi
+
+# ─────────────────────────────────────────────
+# Apply change
+# ─────────────────────────────────────────────
+
+python - "$FILE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+content = path.read_text()
+
+pattern = re.compile(
+    r'^([ \t]*)readonly property color glassBackground: '
+    r'Util\.alpha\(Color\.menu\.background, 0\.62\)[ \t]*$',
+    re.MULTILINE,
+)
+
+if len(pattern.findall(content)) != 1:
+    print("Error: Expected exactly one active glassBackground declaration.")
+    sys.exit(1)
+
+updated = pattern.sub(
+    r'\1readonly property color glassBackground: Util.alpha(Color.menu.background, 0.90)',
+    content,
+    count=1,
+)
+
+path.write_text(updated)
+PY
+
+# ─────────────────────────────────────────────
+# Verify patch
+# ─────────────────────────────────────────────
+
+if grep -Eq \
+    '^[[:space:]]*readonly property color glassBackground: Util\.alpha\(Color\.menu\.background, 0\.90\)' \
+    "$FILE" &&
+    ! grep -Eq \
+    '^[[:space:]]*readonly property color glassBackground: Util\.alpha\(Color\.menu\.background, 0\.62\)' \
+    "$FILE"; then
+
+    gum style \
+        --border rounded \
+        --border-foreground 82 \
+        --padding "1 2" \
+        --foreground 82 \
+        "✓ Spotlight appearance updated!" \
+        "" \
+        "Previous opacity: 0.62" \
+        "New opacity:      0.90" \
+        "File: $FILE" \
+        "Backup: $BACKUP"
+else
+    cp "$BACKUP" "$FILE"
+    gum style \
+        --foreground 196 \
+        "✗ Verification failed." \
+        "Restored the backup."
+    exit 1
+fi
+
+echo
+
+# ─────────────────────────────────────────────
+# Finish
+# ─────────────────────────────────────────────
+
+gum style \
+    --foreground 214 \
+    "Restart or reload the Omarchy plugin to apply the changes."

@@ -88,6 +88,7 @@ NF_LAUNCH="󰐃"
 NF_SHIELD="󰒡"
 NF_DATABASE="󰆼"
 NF_KEY=""
+NF_PATCH="󰁨"
 
 # Package List (bloatware)
 readonly PACKAGES_TO_REMOVE=(
@@ -1622,6 +1623,50 @@ BASHRC_EOF
 }
 
 # ======================================================= #
+# Plugins Patches
+# ======================================================= #
+patch_plugins() {
+    section "Patch Omarchy Plugins ${NF_PATCH}"
+    confirm "Apply patches to Omarchy plugins?" true || {
+        msg_warning "Plugin patching skipped"
+        return 0
+    }
+
+    local patchdir="$PROJECT_DIR/patches"
+    [[ -d "$patchdir" ]] || { msg_warning "No patches directory found: $patchdir"; return 0; }
+
+    # Patch Spotlight Plugin
+    if [[ -f "$patchdir/spotlight-plugin.patch" ]]; then
+        if confirm "Patch Spotlight plugin?" true; then
+            chmod +x "$patchdir/spotlight-plugin.patch"
+            "$patchdir/spotlight-plugin.patch" || msg_error "Spotlight plugin patch failed"
+        else
+            msg_warning "Spotlight plugin patch skipped"
+        fi
+    fi
+
+    # Patch Keybindings-helper Plugin
+    if [[ -f "$patchdir/keybindings-helper-plugin.patch" ]]; then
+        if confirm "Patch Keybindings-helper plugin?" true; then
+            chmod +x "$patchdir/keybindings-helper-plugin.patch"
+            "$patchdir/keybindings-helper-plugin.patch" || msg_error "Keybindings-helper plugin patch failed"
+        else
+            msg_warning "Keybindings-helper plugin patch skipped"
+        fi
+    fi
+
+    # Patch Switcher Plugin
+    if [[ -f "$patchdir/switcher-plugin.patch" ]]; then
+        if confirm "Patch Switcher plugin?" true; then
+            chmod +x "$patchdir/switcher-plugin.patch"
+            "$patchdir/switcher-plugin.patch" || msg_error "Switcher plugin patch failed"
+        else
+            msg_warning "Switcher plugin patch skipped"
+        fi
+    fi
+}
+
+# ======================================================= #
 # Menu
 # ======================================================= #
 
@@ -1662,9 +1707,10 @@ show_menu() {
         "14. Bins: Symlink custom bin/" \
         "15. Dotfiles: Setup (Git/Atuin/Starship/Zsh)" \
         "16. Omarchy: Overwrite system scripts" \
-        "17. View bootstrap.log" \
-        "18. Show Version" \
-        "19. Toggle Debug (current: ${DEBUG})" \
+        "17. Patch Omarchy Plugins" \
+        "18. View bootstrap.log" \
+        "19. Show Version" \
+        "20. Toggle Debug (current: ${DEBUG})" \
         "0. Exit")" || return 1
 
     id="${choice%%.*}"
@@ -1691,7 +1737,8 @@ show_menu() {
         14) setup_bins; pause ;;
         15) setup_dotfiles; pause ;;
         16) setup_omarchy_overwrites; pause ;;
-        17)
+        17) patch_plugins; pause ;;
+        18)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -1699,11 +1746,11 @@ show_menu() {
             fi
             pause
             ;;
-        18)
+        19)
             printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
             pause
             ;;
-        19)
+        20)
             if (( DEBUG == 0 )); then
                 DEBUG=1
                 trap '__debug_trace' DEBUG
@@ -1781,6 +1828,10 @@ run_full() {
     banner
     section "Dotfiles"
     setup_dotfiles || msg_warning "Dotfiles setup had issues"
+
+    banner
+    section "Patch"
+    patch_plugins || msg_warning "Plugin patching had issues"
 
     printf '\n'
     gum style \
