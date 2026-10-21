@@ -1274,6 +1274,15 @@ setup_docker_containers() {
             msg_error "Snapotter failed"
         fi
     fi
+
+    # Start Docker at boot
+    if confirm "Enable Docker service to start at boot?" true; then
+        if run_spinner "${NF_SERVER}  Enabling Docker service..." sudo systemctl enable docker; then
+            msg_success "Docker service enabled"
+        else
+            msg_error "Failed to enable Docker service"
+        fi
+    fi
 }
 
 # ======================================================= #
@@ -1505,12 +1514,43 @@ setup_dotfiles() {
             fi
         fi
 
-        # Empty secrets file sourced last by .zshrc
+        # ---- Private secrets file --------------------------------------
+        # A template of personal API keys and tokens, sourced LAST by .zshrc
+        # so it always wins over defaults. Created once (never overwritten),
+        # because it holds real credentials the user fills in by hand.
+        # File mode is locked to 600 so no other user on the system can read it.
         local secrets="$HOME/.secrets.zsh"
         if [[ ! -f "$secrets" ]]; then
-            if printf '# Private environment for zsh (sourced last by .zshrc)\n' > "$secrets"; then
+            if cat > "$secrets" <<'SECRETS_EOF'
+# ========================================================
+#  Private environment — sourced last by .zshrc
+#  File permissions are set to 600: only the owner can read it.
+#  Fill in the values below, then open a new shell.
+# ========================================================
+
+# -- OpenRouter (gateway used by Omniroute / AI tools) ----
+# API key:     https://openrouter.ai/keys
+export OPENROUTER_API_KEY="<KEY>"
+# Management key: https://openrouter.ai/settings/keys
+export OPENROUTER_MANAGEMENT_KEY="<KEY>"
+
+# -- Omniroute per-tool API keys --------------------------
+# Same Omniroute Key can be used for multiple tools,
+# but you can also use different keys for each tool if you want to track usage separately.
+
+# Claude Code
+export OMNIROUTE_CLAUDE_API_KEY="<KEY>"
+# Codex
+export OMNIROUTE_CODEX_API_KEY="<KEY>"
+# OpenCode
+export OMNIROUTE_OPENCODE_API_KEY="<KEY>"
+# Atuin AI
+export OMNIROUTE_ATUIN_API_KEY="<KEY>"
+SECRETS_EOF
+            then
                 chmod 600 "$secrets"
                 msg_success "Created: $secrets (mode 600)"
+                msg_info "Edit it to add your API keys: $secrets"
             else
                 msg_warning "Failed to create: $secrets"
             fi

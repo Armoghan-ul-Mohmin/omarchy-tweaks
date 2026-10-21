@@ -1,7 +1,10 @@
-api_key = "<Your-Omniroute-Key>"
+# api_key = "<Your-Omniroute-Key>"
 endpoint = "http://localhost:20128/v1"
 port = 4099
 default_model = "omniroute"
+
+[api_key]
+env = "OMNIROUTE_ATUIN_API_KEY"
 
 [request.body]
 stream_options = { include_usage = true }
