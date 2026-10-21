@@ -1947,6 +1947,29 @@ remove_rclone() {
     msg_info "Remotes kept in rclone.conf. Remove with: rclone config delete <name>"
 }
 
+# ======================================================= #
+# Hyperland Config Overwrites
+# ======================================================= #
+hyper_overwrite(){
+    confirm "Overwrite Hyperland config with custom version?" true || {
+        msg_warning "Hyperland config overwrite skipped"
+        return 0
+    }
+    local src="$PROJECT_DIR/configs/hyper"
+    local dest="$HOME/.config/hyper"
+
+    # backup existing autostart.lua, bindings.lua, looknfeel.lua, workspaces.lua and symlink new
+    for file in autostart.lua bindings.lua looknfeel.lua workspaces.lua; do
+        if [[ -f "$dest/$file" || -L "$dest/$file" ]]; then
+            backup_path "$dest/$file" || msg_warning "Failed to backup: $dest/$file"
+        fi
+        if symlink_or_backup "$src/$file" "$dest/$file"; then
+            msg_success "Symlinked: $file"
+        else
+            msg_error "Failed to symlink: $file"
+        fi
+    done
+}
 
 # ======================================================= #
 # Menu
@@ -1992,9 +2015,10 @@ show_menu() {
         "17. Patch Omarchy Plugins" \
         "18. Rclone: Configure cloud storage (mounts)" \
         "19. Rclone: Remove mounts" \
-        "20. View bootstrap.log" \
-        "21. Show Version" \
-        "22. Toggle Debug (current: ${DEBUG})" \
+        "20. Hyperland: Overwrite config" \
+        "21. View bootstrap.log" \
+        "22. Show Version" \
+        "23. Toggle Debug (current: ${DEBUG})" \
         "0. Exit")" || return 1
 
     id="${choice%%.*}"
@@ -2024,7 +2048,8 @@ show_menu() {
         17) patch_plugins; pause ;;
         18) setup_rclone; pause ;;
         19) remove_rclone; pause ;;
-        20)
+        20) hyper_overwrite; pause ;;
+        21)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -2032,11 +2057,11 @@ show_menu() {
             fi
             pause
             ;;
-        21)
+        22)
             printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
             pause
             ;;
-        22)
+        23)
             if (( DEBUG == 0 )); then
                 DEBUG=1
                 trap '__debug_trace' DEBUG
@@ -2122,6 +2147,10 @@ run_full() {
     banner
     section "Cloud Storage"
     setup_rclone || msg_warning "Rclone setup had issues"
+
+    banner
+    section "Hyperland Config"
+    hyper_overwrite || msg_warning "Hyperland config overwrite had issues"
 
     printf '\n'
     gum style \
