@@ -153,6 +153,7 @@ readonly PACMAN_PACKAGES=(
     "zellij"
     "zen-browser-bin"
     "zram-generator"
+    "rclone"
 )
 
 # AUR Packages
@@ -1667,6 +1668,247 @@ patch_plugins() {
 }
 
 # ======================================================= #
+# Rclone Cloud Storage
+# ======================================================= #
+
+setup_rclone() {
+    section "Rclone Cloud Storage ${NF_CLOUD}"
+
+    if ! command -v rclone >/dev/null 2>&1; then
+        msg_warning "rclone is not installed"
+        if confirm "Install rclone now (pacman)?" true; then
+            if run_spinner "${NF_PACKAGE}  Installing rclone..." sudo pacman -S --noconfirm rclone; then
+                msg_success "rclone installed"
+            else
+                msg_error "rclone install failed"
+                return 1
+            fi
+        else
+            msg_warning "Rclone setup skipped (not installed)"
+            return 0
+        fi
+    fi
+
+    command -v fusermount3 >/dev/null 2>&1 || \
+        msg_warning "fuse3 missing — mounts may fail (sudo pacman -S fuse3)"
+
+    confirm "Configure cloud storage accounts (rclone)?" true || {
+        msg_warning "Rclone setup skipped"
+        return 0
+    }
+
+    # Map a menu label to its rclone backend type.
+    local -A backend_of=(
+        ["Google Drive"]="drive"
+        ["Microsoft OneDrive"]="onedrive"
+        ["Dropbox"]="dropbox"
+        ["Proton Drive"]="protondrive"
+    )
+
+    local -a configured_names=()
+
+    while true; do
+        printf '\n'
+        local label
+        label="$(gum choose \
+            --header "${NF_CLOUD}  Add a cloud account (or finish)" \
+            --cursor="${NF_ARROW} " \
+            "Google Drive" \
+            "Microsoft OneDrive" \
+            "Dropbox" \
+            "Proton Drive" \
+            "Done")" || return 0
+
+        [[ "$label" == "Done" ]] && break
+
+        local backend="${backend_of[$label]}"
+        [[ -n "$backend" ]] || { msg_error "Unknown provider"; continue; }
+
+        # Account name -> remote name, used verbatim (e.g. "work", "me@gmail.com")
+        local nick remote
+        nick="$(gum input \
+            --prompt "  Name for this ${label} account: " \
+            --placeholder "personal")" || continue
+        [[ -n "$nick" ]] || { msg_warning "Account name required"; continue; }
+
+        remote="$(printf '%s' "$nick" \
+            | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9._@+-')"
+
+        if rclone listremotes 2>/dev/null | grep -qx "${remote}:"; then
+            msg_warning "Remote '${remote}' already exists"
+            confirm "Overwrite it?" false || continue
+            rclone config delete "$remote" >/dev/null 2>&1 || true
+        fi
+
+        # ---- Authorize / collect credentials ----
+        local ok=false
+        if [[ "$backend" == "protondrive" ]]; then
+            # Proton uses username/password (+ optional 2FA), not OAuth.
+            local user pass twofa
+            user="$(gum input --prompt "  Proton username (email): " --placeholder "you@proton.me")" || continue
+            [[ -n "$user" ]] || { msg_warning "Username required"; continue; }
+            pass="$(gum input --password --prompt "  Proton password: ")" || continue
+            [[ -n "$pass" ]] || { msg_warning "Password required"; continue; }
+            twofa="$(gum input --prompt "  2FA code (blank if none): " --placeholder "optional")" || twofa=""
+
+            printf '  %s  Saving %s...\n' "${NF_CLOUD}" "$remote"
+            if [[ -n "$twofa" ]]; then
+                rclone config create --non-interactive "$remote" "$backend" \
+                    username "$user" password "$pass" 2fa "$twofa" && ok=true
+            else
+                rclone config create --non-interactive "$remote" "$backend" \
+                    username "$user" password "$pass" && ok=true
+            fi
+        else
+            # OAuth backends: run `rclone authorize <backend>` on this machine.
+            printf '  %s  Launching browser authorization...\n' "${NF_CLOUD}"
+            printf '  %s\n' "Complete the login in your browser, then return here."
+
+            local raw token
+            raw="$(rclone authorize "$backend" 2>&1)" || {
+                msg_error "Authorization failed for ${label}"
+                continue
+            }
+            token="$(printf '%s\n' "$raw" | awk '
+                /Paste the following into your remote machine --->/{grab=1;next}
+                /<---End paste/{grab=0}
+                grab{print}
+            ')"
+            [[ -n "$token" ]] || {
+                msg_error "Could not read token from rclone authorize"
+                continue
+            }
+
+            printf '  %s  Saving %s...\n' "${NF_CLOUD}" "$remote"
+            local -a extra=()
+            [[ "$backend" == "drive" ]] && extra=(config_shared_client_id true)
+            if rclone config create --non-interactive "$remote" "$backend" \
+                "${extra[@]}" token "$token"; then
+                ok=true
+            fi
+        fi
+
+        if [[ "$ok" == true ]]; then
+            if rclone lsd "${remote}:" >/dev/null 2>&1; then
+                msg_success "Account ready: ${remote}"
+            else
+                msg_warning "Remote saved but could not connect: ${remote}"
+            fi
+            configured_names+=("$remote")
+        else
+            msg_error "Failed to configure ${label}"
+        fi
+    done
+
+    (( ${#configured_names[@]} > 0 )) || { msg_info "No accounts configured"; return 0; }
+
+    # ---- Mounts & autostart ----
+    printf '\n'
+    confirm "Mount these accounts at login (systemd --user, offline cache)?" true || {
+        msg_warning "Mount setup skipped"
+        return 0
+    }
+
+    local mount_root="/mnt"
+    local unit_dir="$HOME/.config/systemd/user"
+    mkdir -p "$unit_dir"
+
+    local name mountpoint unit enabled=0 failed=0
+    for name in "${configured_names[@]}"; do
+        mountpoint="$mount_root/$name"
+        unit="$unit_dir/rclone-${name}.service"
+
+        # /mnt is root-owned; create the mountpoint (and give it to us) once.
+        if [[ ! -d "$mountpoint" ]]; then
+            if ! run_spinner "${NF_PACKAGE}  Creating ${mountpoint}..." \
+                sudo mkdir -p "$mountpoint"; then
+                msg_error "Could not create $mountpoint"
+                ((++failed))
+                continue
+            fi
+        fi
+        sudo chown "$USER" "$mountpoint" 2>/dev/null || true
+
+        cat > "$unit" <<UNIT_EOF
+[Unit]
+Description=rclone mount ${name}: at ${mountpoint}
+Documentation=https://rclone.org/commands/rclone_mount/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStartPre=/usr/bin/mkdir -p ${mountpoint}
+ExecStart=/usr/bin/rclone mount ${name}: ${mountpoint} \\
+    --config ${HOME}/.config/rclone/rclone.conf \\
+    --vfs-cache-mode full \\
+    --vfs-cache-max-age 72h \\
+    --vfs-cache-max-size 5G \\
+    --dir-cache-time 1h \\
+    --poll-interval 1m \\
+    --umask 022 \\
+    --log-level INFO
+ExecStop=/bin/fusermount3 -u ${mountpoint}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+UNIT_EOF
+
+        systemctl --user daemon-reload 2>/dev/null || true
+        if systemctl --user enable --now "rclone-${name}.service" >/dev/null 2>&1; then
+            ((++enabled))
+            msg_success "Mounted & enabled at login: $mountpoint"
+        else
+            ((++failed))
+            msg_warning "Unit written but not started: rclone-${name}.service"
+            msg_debug "Check: systemctl --user status rclone-${name}.service"
+        fi
+    done
+
+    printf '\n'
+    msg_info "Mounts appear at: $mount_root/<account>"
+    msg_info "Manage: systemctl --user status rclone-<account>.service"
+    msg_info "Offline: files you open are cached (VFS full, up to 5G / 72h)."
+    if [[ "$failed" -eq 0 ]]; then
+        msg_success "$enabled account(s) mounted and set to start at login"
+    else
+        msg_warning "$enabled mounted, $failed need attention"
+    fi
+}
+
+# ---- Tear-down helper (handy as a menu entry) ----
+remove_rclone() {
+    section "Remove Rclone Setup ${NF_CLOUD}"
+    confirm "Disable/remove all rclone mounts and units?" false || {
+        msg_warning "Rclone removal skipped"
+        return 0
+    }
+
+    local unit name
+    shopt -s nullglob
+    local -a units=("$HOME/.config/systemd/user"/rclone-*.service)
+    shopt -u nullglob
+
+    if (( ${#units[@]} == 0 )); then
+        msg_info "No rclone mount units found"
+    else
+        for unit in "${units[@]}"; do
+            name="$(basename "$unit" .service)"
+            systemctl --user disable --now "$name" >/dev/null 2>&1 || true
+            if rm -f -- "$unit"; then
+                msg_success "Removed: $unit"
+            fi
+        done
+    fi
+
+    systemctl --user daemon-reload 2>/dev/null || true
+    msg_info "Remotes kept in rclone.conf. Remove with: rclone config delete <name>"
+}
+
+
+# ======================================================= #
 # Menu
 # ======================================================= #
 
@@ -1708,9 +1950,11 @@ show_menu() {
         "15. Dotfiles: Setup (Git/Atuin/Starship/Zsh)" \
         "16. Omarchy: Overwrite system scripts" \
         "17. Patch Omarchy Plugins" \
-        "18. View bootstrap.log" \
-        "19. Show Version" \
-        "20. Toggle Debug (current: ${DEBUG})" \
+        "18. Rclone: Configure cloud storage (mounts)" \
+        "19. Rclone: Remove mounts" \
+        "20. View bootstrap.log" \
+        "21. Show Version" \
+        "22. Toggle Debug (current: ${DEBUG})" \
         "0. Exit")" || return 1
 
     id="${choice%%.*}"
@@ -1738,7 +1982,9 @@ show_menu() {
         15) setup_dotfiles; pause ;;
         16) setup_omarchy_overwrites; pause ;;
         17) patch_plugins; pause ;;
-        18)
+        18) setup_rclone; pause ;;
+        19) remove_rclone; pause ;;
+        20)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -1746,11 +1992,11 @@ show_menu() {
             fi
             pause
             ;;
-        19)
+        21)
             printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
             pause
             ;;
-        20)
+        22)
             if (( DEBUG == 0 )); then
                 DEBUG=1
                 trap '__debug_trace' DEBUG
@@ -1832,6 +2078,10 @@ run_full() {
     banner
     section "Patch"
     patch_plugins || msg_warning "Plugin patching had issues"
+
+    banner
+    section "Cloud Storage"
+    setup_rclone || msg_warning "Rclone setup had issues"
 
     printf '\n'
     gum style \

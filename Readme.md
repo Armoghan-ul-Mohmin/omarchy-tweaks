@@ -25,6 +25,7 @@ Omarchy Tweaks is a curated collection of configs, dotfiles, scripts, containers
 - **WebApps & Omarchy Plugins** — Install preconfigured web apps and community Omarchy plugins
 - **AI Tooling** — Set up Claude Code, OpenCode, and Codex with Omniroute integration, plus curated Ollama models
 - **Docker Containers** — Atuin-AI, OpenWebUI, Outline, and SnapOtter stacks, each with `sample.env` and a README
+- **Cloud Storage** — rclone walkthrough for Google Drive, OneDrive, Dropbox, and Proton Drive; multiple accounts per provider, auto-mounted at login with offline VFS cache
 - **Modular Zsh Config** — A full zsh setup under `dotfiles/zsh/`: plug.zsh plugins, Atuin history, fzf-tab, gum-powered functions, and custom keybindings
 - **Git Dotfiles** — Global git config, Catppuccin theming, and chaining global hooks (conventional commits, secret scanning, large-file checks)
 - **Shell Documentation** — A devhints-style reference site under `docs/` covering zsh, aliases, functions, git, and the whole config
@@ -100,7 +101,10 @@ OMARCHY_BIN=/usr/local/share/omarchy/bin ./bootstrap.sh --menu
 | 14 | Bins | Symlinks `bin/*` into `~/.local/bin` |
 | 15 | Dotfiles | Links git, Atuin, Starship, and zsh configs (+ docs menu entries) |
 | 16 | Omarchy Overwrites | Installs custom system script overrides |
-| 17–19 | Utilities | View log, show version, toggle debug |
+| 17 | Patch Plugins | Applies local patches to Omarchy plugins |
+| 18 | Rclone: Configure | Cloud storage walkthrough (auth, mounts, autostart) |
+| 19 | Rclone: Remove | Disable/remove generated mount units |
+| 20–22 | Utilities | View log, show version, toggle debug |
 
 ### Zsh configuration (`dotfiles/zsh/`)
 
