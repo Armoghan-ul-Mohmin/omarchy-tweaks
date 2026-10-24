@@ -195,6 +195,7 @@ readonly OMARCHY_PLUGINS=(
     "Spotlight|https://github.com/maajix/omarchy-spotlight.git|A Raycast-style launcher for Omarchy"
     "Tray|https://github.com/TyRichards/omarchy-tray.git|A better system tray"
     "Yet Another Notification Center|https://github.com/Loafer19/omarchy-yet-another-notification-center.git|Notification history"
+    "Omarchy Key Prompter |https://github.com/ForrestKnight/omarchy-key-promoter.git|Shows the keyboard shortcut whenever you reach for the menu instead."
 )
 
 # Ollama Models
@@ -1972,6 +1973,105 @@ hyper_overwrite(){
 }
 
 # ======================================================= #
+# DistroBox
+# ======================================================= #
+setup_distrobox() {
+    section "Distrobox Containers ${NF_BOX}"
+
+    if ! command -v distrobox >/dev/null 2>&1; then
+        msg_warning "Distrobox is not installed"
+        if confirm "Install Distrobox now (pacman)?" true; then
+            if run_spinner "${NF_PACKAGE}  Installing distrobox..." sudo pacman -S --noconfirm distrobox; then
+                msg_success "Distrobox installed"
+            else
+                msg_error "Distrobox install failed"
+                return 1
+            fi
+        else
+            msg_warning "Distrobox setup skipped (not installed)"
+            return 0
+        fi
+    fi
+
+    # Container name -> provisioning script. Each script lives in this repo at
+    # scripts/distrobox/<name>.sh and installs the zsh/dotfiles runtime.
+    local -A script_of=(
+        ["Kali Linux"]="kali.sh"
+        ["Ubuntu"]="ubuntu.sh"
+        ["Debian"]="debian.sh"
+        ["Fedora"]="fedora.sh"
+        ["Arch Linux"]="arch.sh"
+    )
+    local -A image_of=(
+        ["Kali Linux"]="docker.io/kalilinux/kali-rolling:latest"
+        ["Ubuntu"]="docker.io/ubuntu:latest"
+        ["Debian"]="docker.io/debian:latest"
+        ["Fedora"]="docker.io/fedora:latest"
+        ["Arch Linux"]="docker.io/archlinux:latest"
+    )
+
+    # Pick distro
+    local distro
+    distro="$(gum choose \
+        --header "${NF_BOX}  Select a base distro for the container" \
+        --cursor="${NF_ARROW} " \
+        "Kali Linux" "Ubuntu" "Debian" "Fedora" "Arch Linux")" || return 0
+    [[ -n "$distro" ]] || { msg_warning "No distro selected"; return 0; }
+
+    local image="${image_of[$distro]}"
+    local script="${script_of[$distro]}"
+    local script_path="$PROJECT_DIR/scripts/distrobox/$script"
+
+    # Container name (defaults to a slug of the distro)
+    local default_name
+    default_name="$(printf '%s' "$distro" | tr '[:upper:]' '[:lower:]' | tr -d ' ' | sed 's/linux//')"
+    local name
+    name="$(gum input \
+        --prompt "  Container name: " \
+        --placeholder "${default_name:-container}" \
+        --value "$default_name")" || return 0
+    [[ -n "$name" ]] || { msg_warning "No name provided"; return 0; }
+
+    if distrobox list 2>/dev/null | awk '{print $3}' | grep -qx "$name"; then
+        msg_warning "Container '${name}' already exists"
+        confirm "Recreate it?" false || return 0
+        distrobox rm --force "$name" >/dev/null 2>&1 || true
+    fi
+
+    # Create the container
+    if run_spinner "${NF_BOX}  Creating ${name} from ${image}..." \
+        distrobox create --name "$name" --image "$image" --yes; then
+        msg_success "Container created: $name"
+    else
+        msg_error "Failed to create container: $name"
+        return 1
+    fi
+
+    # ---- Instructions ------------------------------------------------------
+    printf '\n'
+    msg_info "Enter it with:   distrobox enter ${name}"
+    msg_info "Then run:        bash ~/.omarchy-tweaks/scripts/distrobox/${script}"
+    printf '\n'
+    if [[ -f "$script_path" ]]; then
+        msg_info "Or, run the provisioning script now (inside the container):"
+        if confirm "Provision ${name} now (runs ${script} inside it)?" true; then
+            if distrobox enter "$name" -- bash -lc "bash '$script_path' -v"; then
+                msg_success "Provisioned ${name} with ${script}"
+            else
+                msg_warning "Provisioning had issues — see output above"
+            fi
+        fi
+    else
+        msg_warning "Provisioning script not found: $script_path"
+    fi
+
+    printf '\n'
+    msg_info "The container shares your home; the shell config lives at ~/.omarchy-tweaks."
+    msg_info "After provisioning, just run: distrobox enter ${name}  (then: zsh)"
+}
+
+
+# ======================================================= #
 # Menu
 # ======================================================= #
 
@@ -2016,9 +2116,10 @@ show_menu() {
         "18. Rclone: Configure cloud storage (mounts)" \
         "19. Rclone: Remove mounts" \
         "20. Hyperland: Overwrite config" \
-        "21. View bootstrap.log" \
-        "22. Show Version" \
-        "23. Toggle Debug (current: ${DEBUG})" \
+        "21. Distrobox: Create + provision container" \
+        "22. View bootstrap.log" \
+        "23. Show Version" \
+        "24. Toggle Debug (current: ${DEBUG})" \
         "0. Exit")" || return 1
 
     id="${choice%%.*}"
@@ -2049,7 +2150,8 @@ show_menu() {
         18) setup_rclone; pause ;;
         19) remove_rclone; pause ;;
         20) hyper_overwrite; pause ;;
-        21)
+        21) setup_distrobox; pause ;;
+        22)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -2057,11 +2159,11 @@ show_menu() {
             fi
             pause
             ;;
-        22)
+        23)
             printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
             pause
             ;;
-        23)
+        24)
             if (( DEBUG == 0 )); then
                 DEBUG=1
                 trap '__debug_trace' DEBUG

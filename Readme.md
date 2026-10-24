@@ -104,7 +104,9 @@ OMARCHY_BIN=/usr/local/share/omarchy/bin ./bootstrap.sh --menu
 | 17 | Patch Plugins | Applies local patches to Omarchy plugins |
 | 18 | Rclone: Configure | Cloud storage walkthrough (auth, mounts, autostart) |
 | 19 | Rclone: Remove | Disable/remove generated mount units |
-| 20–22 | Utilities | View log, show version, toggle debug |
+| 20 | Hyprland Overwrite | Installs custom Hyprland config overrides |
+| 21 | Distrobox | Create a distro container and provision it (Kali/Ubuntu/Debian/Fedora/Arch) |
+| 22–24 | Utilities | View log, show version, toggle debug |
 
 ### Zsh configuration (`dotfiles/zsh/`)
 
@@ -140,6 +142,29 @@ See [`dotfiles/zsh/README.md`](dotfiles/zsh/README.md) for details.
 - Chaining global hooks: `pre-commit` (secret scanning), `commit-msg` (Conventional Commits), `pre-push` (large-file/upstream checks), `post-rewrite`
 - `ignore` and `secret-patterns` support files
 
+### Distrobox containers (`scripts/distrobox/`)
+
+Menu option **21** creates a Distrobox container and provisions it. Each supported
+distro has a script that installs the zsh/dotfiles runtime (zsh, fzf, zoxide,
+atuin, starship, eza, bat, fd, ripgrep, gum, zellij, fastfetch, onefetch) plus a
+small dev toolkit, using that distro's native package manager:
+
+| Distro | Image | Script |
+|--------|-------|--------|
+| Kali Linux | `kalilinux/kali-rolling` | `scripts/distrobox/kali.sh` |
+| Ubuntu | `ubuntu:latest` | `scripts/distrobox/ubuntu.sh` |
+| Debian | `debian:latest` | `scripts/distrobox/debian.sh` |
+| Fedora | `fedora:latest` | `scripts/distrobox/fedora.sh` |
+| Arch Linux | `archlinux:latest` | `scripts/distrobox/arch.sh` |
+
+The bootstrap creates the container, then prints how to enter it and which script
+to run (and can run it for you). Example:
+
+```bash
+distrobox enter kali
+bash ~/.omarchy-tweaks/scripts/distrobox/kali.sh
+```
+
 ## Shell Docs
 
 A devhints-style reference site lives in [`docs/`](docs/index.html). Open `docs/index.html` in a browser — no build step, plain HTML + one stylesheet.
@@ -172,6 +197,7 @@ omarchy-tweaks/
 │   └── zsh/          #   modular zsh config (.zshrc + lib/*.zsh)
 ├── logs/             # Runtime logs (bootstrap.log, gitignored except .gitkeep)
 ├── scripts/          # Custom Omarchy system script overrides
+│   └── distrobox/    #   Per-distro provisioning scripts (kali/ubuntu/debian/fedora/arch)
 ├── LICENSE
 └── Readme.md
 ```
