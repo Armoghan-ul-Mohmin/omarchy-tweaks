@@ -1969,6 +1969,13 @@ hyper_overwrite(){
         else
             msg_error "Failed to symlink: $file"
         fi
+        # Add require (hypr.workspaces) at the end of hyperland.lua file if not present
+        if ! grep -q "require('hypr.workspaces')" "$dest/hyperland.lua"; then
+            echo "require('hypr.workspaces')" >> "$dest/hyperland.lua"
+            msg_success "Added require('hypr.workspaces') to hyperland.lua"
+        else
+            msg_info "require('hypr.workspaces') already present in hyperland.lua"
+        fi
     done
 }
 
