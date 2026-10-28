@@ -1292,7 +1292,7 @@ setup_docker_containers() {
 
 create_dirs() {
     section "Create Directories ${NF_FOLDER}"
-    local dirs=("$HOME_DIR/Github" "$HOME_DIR/Projects" "$HOME_DIR/.ISO" "$HOME_DIR/.VM")
+    local dirs=("$HOME_DIR/Github" "$HOME_DIR/Github/Clone" "$HOME_DIR/Projects" "$HOME_DIR/.ISO" "$HOME_DIR/.VM")
     local d
     for d in "${dirs[@]}"; do
         if [[ -d "$d" ]]; then
@@ -2175,6 +2175,42 @@ create_vm_setup(){
 }
 
 # ======================================================= #
+# Patch Shutdown Problem
+# ======================================================= #
+patch_shutdown() {
+    local dir="/etc/limine-entry-tool.d"
+    local file="$dir/intel-iommu-off.conf"
+
+    if [[ -f "$file" ]]; then
+        msg_warning "Already applied: $file"
+        confirm "Reapply anyway?" false || return 0
+    fi
+
+    confirm "Apply intel_iommu=off via limine-entry-tool.d?" true || {
+        msg_warning "Shutdown patch skipped"
+        return 0
+    }
+
+    sudo mkdir -p "$dir" || {
+        msg_error "Failed to create directory: $dir"
+        return 1
+    }
+
+    echo 'KERNEL_CMDLINE[default]+=" intel_iommu=off"' | sudo tee "$file" >/dev/null || {
+        msg_error "Failed to write config: $file"
+        return 1
+    }
+    msg_success "Created: $file"
+
+    if command -v limine-mkinitcpio >/dev/null 2>&1; then
+        msg_info "Regenerating initramfs with limine-mkinitcpio..."
+        sudo limine-mkinitcpio || msg_warning "limine-mkinitcpio exited with an error"
+    else
+        msg_warning "limine-mkinitcpio not found - run it manually after updating"
+    fi
+}
+
+# ======================================================= #
 # Menu
 # ======================================================= #
 
@@ -2221,9 +2257,10 @@ show_menu() {
         "20. Hyperland: Overwrite config" \
         "21. Distrobox: Create + provision container" \
         "22. Create VM Setup" \
-        "23. View bootstrap.log" \
-        "24. Show Version" \
-        "25. Toggle Debug (current: ${DEBUG})" \
+        "24. Patch Shutdown Problem (intel_iommu=off)" \
+        "25. View bootstrap.log" \
+        "26. Show Version" \
+        "27. Toggle Debug (current: ${DEBUG})" \
         "0. Exit")" || return 1
 
     id="${choice%%.*}"
@@ -2256,7 +2293,8 @@ show_menu() {
         20) hyper_overwrite; pause ;;
         21) setup_distrobox; pause ;;
         22) create_vm_setup; pause;;
-        23)
+        24) patch_shutdown; pause ;;
+        25)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -2264,11 +2302,11 @@ show_menu() {
             fi
             pause
             ;;
-        24)
+        26)
             printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
             pause
             ;;
-        25)
+        27)
             if (( DEBUG == 0 )); then
                 DEBUG=1
                 trap '__debug_trace' DEBUG
@@ -2372,6 +2410,20 @@ run_full() {
     banner
     section "Setup Vm Setup Script"
     create_vm_setup || msg_warning "VM setup script had issues"
+
+    banner
+    section "Shutdown Patch (intel_iommu=off)"
+    msg_info "Intended for laptops like ThinkPad T460 with improper shutdown/reboot"
+    printf '\n'
+    msg_warning "WARNING: ADVANCED SYSTEM-LEVEL CHANGE"
+    msg_warning "This patch modifies your boot configuration."
+    msg_warning "It disables Intel IOMMU using: intel_iommu=off"
+    msg_warning "This may affect virtualization, PCI passthrough, and device isolation."
+    msg_warning "Only apply this if you are experiencing shutdown or power-off issues."
+    msg_warning "Do not apply this as a general performance tweak."
+    msg_warning "If this does not fix your shutdown issue, remove the patch and restore your previous configuration."
+    printf '\n'
+    patch_shutdown || msg_warning "Shutdown patch had issues"
 
     printf '\n'
     gum style \
