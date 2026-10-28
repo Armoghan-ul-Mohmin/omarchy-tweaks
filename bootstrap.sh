@@ -1983,7 +1983,10 @@ hyper_overwrite(){
 # DistroBox
 # ======================================================= #
 setup_distrobox() {
-    section "Distrobox Containers ${NF_BOX}"
+    confirm "Setup Distrobox container ?" true || {
+        msg_warning "Distrobox setup skipped"
+        return 0
+    }
 
     if ! command -v distrobox >/dev/null 2>&1; then
         msg_warning "Distrobox is not installed"
@@ -2077,6 +2080,99 @@ setup_distrobox() {
     msg_info "After provisioning, just run: distrobox enter ${name}  (then: zsh)"
 }
 
+# ======================================================= #
+# Create Vm Script
+# ======================================================= #
+create_vm_setup(){
+    confirm "Create VM Setup Script?" true || {
+        msg_warning "VM setup skipped"
+        return 0
+    }
+
+    local packages=(
+        "qemu-desktop"
+        "libvirt"
+        "virt-manager"
+        "dnsmasq"
+        "virt-viewer"
+    )
+
+    if ! command -v $packages >/dev/null 2>&1; then
+        msg_warning "Required packages are not installed: ${packages[*]}"
+        if confirm "Install required packages now (pacman)?" true; then
+            if run_spinner "${NF_PACKAGE}  Installing required packages..." sudo pacman -S --noconfirm "${packages[@]}"; then
+                msg_success "Required packages installed"
+            else
+                msg_error "Failed to install required packages"
+                return 1
+            fi
+        else
+            msg_warning "VM setup skipped (required packages not installed)"
+            return 0
+        fi
+    fi
+
+    # sudo systemctl enable --now libvirtd.service
+    if ! sudo systemctl is-active --quiet libvirtd.service; then
+        msg_warning "libvirtd.service is not active"
+        if confirm "Enable and start libvirtd.service now?" true; then
+            if sudo systemctl enable --now libvirtd.service; then
+                msg_success "libvirtd.service enabled and started"
+            else
+                msg_error "Failed to enable/start libvirtd.service"
+                return 1
+            fi
+        else
+            msg_warning "VM setup skipped (libvirtd.service not active)"
+            return 0
+        fi
+    fi
+
+    # sudo usermod -aG libvirt "$USER"
+    if ! groups "$USER" | grep -q "\blibvirt\b"; then
+        msg_warning "User $USER is not in the libvirt group"
+        if confirm "Add $USER to libvirt group now?" true; then
+            if sudo usermod -aG libvirt "$USER"; then
+                msg_success "User $USER added to libvirt group"
+                msg_info "You may need to log out and back in for this to take effect."
+            else
+                msg_error "Failed to add $USER to libvirt group"
+                return 1
+            fi
+        else
+            msg_warning "VM setup skipped (user not in libvirt group)"
+            return 0
+        fi
+    fi
+
+    # sudo virsh net-start default
+    # sudo virsh net-autostart default
+    if ! sudo virsh net-info default >/dev/null 2>&1; then
+        msg_warning "Default virtual network is not active"
+        if confirm "Start and autostart default virtual network now?" true; then
+            if sudo virsh net-start default && sudo virsh net-autostart default; then
+                msg_success "Default virtual network started and set to autostart"
+            else
+                msg_error "Failed to start/autostart default virtual network"
+                return 1
+            fi
+        else
+            msg_warning "VM setup skipped (default virtual network not active)"
+            return 0
+        fi
+    fi
+
+    # Symlink the script
+    local src="$PROJECT_DIR/scripts/omarchy-create-vm"
+    local dst="$HOME/.local/bin/omarchy-create-vm"
+    ensure_dir "$(dirname -- "$dst")"
+    [[ -e "$dst" || -L "$dst" ]] && backup_path "$dst"
+    if symlink_or_backup "$src" "$dst"; then
+        msg_success "Symlinked: $dst -> $src"
+    else
+        msg_error "Failed to symlink: $dst"
+    fi
+}
 
 # ======================================================= #
 # Menu
@@ -2124,9 +2220,10 @@ show_menu() {
         "19. Rclone: Remove mounts" \
         "20. Hyperland: Overwrite config" \
         "21. Distrobox: Create + provision container" \
-        "22. View bootstrap.log" \
-        "23. Show Version" \
-        "24. Toggle Debug (current: ${DEBUG})" \
+        "22. Create VM Setup" \
+        "23. View bootstrap.log" \
+        "24. Show Version" \
+        "25. Toggle Debug (current: ${DEBUG})" \
         "0. Exit")" || return 1
 
     id="${choice%%.*}"
@@ -2158,7 +2255,8 @@ show_menu() {
         19) remove_rclone; pause ;;
         20) hyper_overwrite; pause ;;
         21) setup_distrobox; pause ;;
-        22)
+        22) create_vm_setup; pause;;
+        23)
             if [[ -f "$LOG_FILE" ]]; then
                 less -R "$LOG_FILE" 2>/dev/null || cat "$LOG_FILE"
             else
@@ -2166,11 +2264,11 @@ show_menu() {
             fi
             pause
             ;;
-        23)
+        24)
             printf '\n%s %s\n' "$SCRIPT_NAME" "$VERSION"
             pause
             ;;
-        24)
+        25)
             if (( DEBUG == 0 )); then
                 DEBUG=1
                 trap '__debug_trace' DEBUG
@@ -2244,22 +2342,36 @@ run_full() {
     setup_docker_containers || msg_warning "Containers had issues"
     setup_bins || msg_warning "Bin symlinks had issues"
     setup_omarchy_overwrites || msg_warning "Omarchy overwrites had issues"
+    pause "Continue to dotfiles?" || return 1
 
     banner
     section "Dotfiles"
     setup_dotfiles || msg_warning "Dotfiles setup had issues"
+    pause "Continue to Plugin patching?" || return 1
 
     banner
-    section "Patch"
+    section "Plugin Patching"
     patch_plugins || msg_warning "Plugin patching had issues"
+    pause "Continue to Cloud Storage?" || return 1
 
     banner
     section "Cloud Storage"
     setup_rclone || msg_warning "Rclone setup had issues"
+    pause "Continue to Hyperland Config?" || return 1
 
     banner
     section "Hyperland Config"
     hyper_overwrite || msg_warning "Hyperland config overwrite had issues"
+    pause "Continue to Distrobox?" || return 1
+
+    banner
+    section "Setup Distrobox"
+    setup_distrobox || msg_warning "Distrobox setup had issues"
+    pause "Continue to VM Setup?" || return 1
+
+    banner
+    section "Setup Vm Setup Script"
+    create_vm_setup || msg_warning "VM setup script had issues"
 
     printf '\n'
     gum style \

@@ -27,3 +27,6 @@ logs/*
 .opencode
 
 session-ses_ec9d.md
+*.old
+*.backup
+*.bak*
