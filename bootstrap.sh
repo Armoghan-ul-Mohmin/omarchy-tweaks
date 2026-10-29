@@ -2211,6 +2211,152 @@ patch_shutdown() {
 }
 
 # ======================================================= #
+# Custom Wallpapers
+# ======================================================= #
+wallpapers(){
+    confirm "Install custom wallpapers?" true || {
+        msg_warning "Wallpaper installation skipped"
+        return 0
+    }
+
+    local dest="$HOME/Pictures/Wallpapers"
+    local url="https://github.com/Get-Winfig/winfig-wallpaper.git"
+    local wallpaper="$dest/images"
+    local BACK_DIR="$HOME/.config/omarchy/backgrounds"
+    local random_="$PROJECT_DIR/scripts/omarchy-bg-random"
+    local hook_dir="$HOME/.config/omarchy/hooks/post-boot.d"
+    local hook="$hook_dir/random-wallpaper"
+
+
+    # clone the Repo if not already exist
+    if [[ ! -d "$dest" ]]; then
+        if run_spinner "${NF_PACKAGE}  Cloning wallpapers..." git clone "$url" --depth 1 "$dest"; then
+            msg_success "Wallpapers cloned to: $dest"
+        else
+            msg_error "Failed to clone wallpapers"
+            return 1
+        fi
+    else
+        msg_info "Wallpapers already exist at: $dest"
+    fi
+
+    # symlink the random wallpaper script
+    ln -sf "$random_" "$HOME/.local/bin/omarchy-bg-random" 2>/dev/null || {
+        msg_warning "Failed to symlink random wallpaper script"
+    }
+
+    # Symlink all available Wallpapers to all the themes
+    if [[ ! -d "$wallpaper" ]]; then
+        msg_warning "No wallpapers found in: $wallpaper"
+        return 0
+    fi
+
+    # Discover theme directories without sorting.
+    mapfile -d '' -t THEME_DIRS < <(
+        find "$BACK_DIR" -mindepth 1 -maxdepth 1 -type d -print0
+    )
+
+    msg_info "Found theme directories: ${THEME_DIRS[*]}"
+
+    # Collect images without sorting or deduplicating.
+    mapfile -d '' -t IMGS < <(
+        find "$wallpaper" -maxdepth 3 -type f \
+            \( -iname '*.jpg' -o -iname '*.jpeg' \
+            -o -iname '*.png' -o -iname '*.webp' \
+            -o -iname '*.gif' \) -print0 2>/dev/null
+    )
+    msg_info "Found ${#IMGS[@]} image files"
+
+    ((${#IMGS[@]})) || {
+        msg_warning "No image files found in: $wallpaper"
+        return 0
+    }
+
+    # Build a temporary work list and process symlinks in parallel.
+    WORK="$(mktemp)"
+    trap 'rm -f "$WORK"' EXIT
+
+    for td in "${THEME_DIRS[@]}"; do
+        for img in "${IMGS[@]}"; do
+            printf '%s\0%s\0' "$img" "$td/${img##*/}" >> "$WORK"
+        done
+    done
+
+    export WORK
+    xargs -0 -n 2 -P "$(nproc)" sh -c '
+        ln -sf "$1" "$2" 2>/dev/null || true
+        ' _ < "$WORK"
+
+    msg_success "Symlinked wallpapers to all themes in: $BACK_DIR"
+
+    # Create Wallpaper Hook
+    ensure_dir "$hook_dir"
+    if [[ ! -f "$hook" ]]; then
+        command cat > "$hook" <<'EOF'
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+config="$HOME/.omarchy-tweaks/config/wallpapers.json"
+script="$HOME/.omarchy-tweaks/scripts/omarchy-bg-random"
+state_dir="$HOME/.local/state/omarchy-tweaks"
+pidfile="$state_dir/random-wallpaper.pid"
+
+if [[ ! -f "$config" || ! -x "$script" ]]; then
+    omarchy-notification-send -u critical \
+        "Wallpaper config or randomizer script is missing."
+    exit 1
+fi
+
+command -v jq >/dev/null 2>&1 || exit 1
+
+enabled=$(jq -er '.enabled | select(type == "boolean")' "$config")
+interval_seconds=$(jq -er \
+    '.interval_seconds | select(type == "number" and . > 0 and floor == .)' \
+    "$config")
+
+if [[ "$enabled" != "true" ]]; then
+    # Stop the existing loop if randomization has been disabled.
+    if [[ -f "$pidfile" ]]; then
+        kill "$(cat "$pidfile")" 2>/dev/null || true
+        rm -f "$pidfile"
+    fi
+    exit 0
+fi
+
+mkdir -p "$state_dir"
+
+# Avoid starting a second scheduler.
+if [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    exit 0
+fi
+
+# The hook owns the timer; the randomizer only changes the wallpaper.
+nohup bash -c '
+    set -u
+    script=$1
+    interval=$2
+    pidfile=$3
+
+    echo "$BASHPID" > "$pidfile"
+    trap '\''rm -f "$pidfile"'\'' EXIT
+
+    while true; do
+        "$script" || omarchy-notification-send -u critical "Wallpaper change failed"
+        sleep "$interval"
+    done
+' _ "$script" "$interval_seconds" "$pidfile" \
+    >/dev/null 2>&1 </dev/null &
+
+EOF
+    chmod +x "$hook"
+    msg_success "Wallpaper hook installed: $hook"
+else
+    msg_info "Wallpaper hook already exists: $hook"
+fi
+}
+
+# ======================================================= #
 # Menu
 # ======================================================= #
 
@@ -2257,6 +2403,7 @@ show_menu() {
         "20. Hyperland: Overwrite config" \
         "21. Distrobox: Create + provision container" \
         "22. Create VM Setup" \
+        "23. Setup Wallpapers" \
         "24. Patch Shutdown Problem (intel_iommu=off)" \
         "25. View bootstrap.log" \
         "26. Show Version" \
@@ -2293,6 +2440,7 @@ show_menu() {
         20) hyper_overwrite; pause ;;
         21) setup_distrobox; pause ;;
         22) create_vm_setup; pause;;
+        23) wallpapers; pause;;
         24) patch_shutdown; pause ;;
         25)
             if [[ -f "$LOG_FILE" ]]; then
@@ -2410,6 +2558,10 @@ run_full() {
     banner
     section "Setup Vm Setup Script"
     create_vm_setup || msg_warning "VM setup script had issues"
+
+    banner
+    section "Setup Custom Wallpapers"
+    wallpapers || msg_warning "Custom wallpapers setup had issues"
 
     banner
     section "Shutdown Patch (intel_iommu=off)"

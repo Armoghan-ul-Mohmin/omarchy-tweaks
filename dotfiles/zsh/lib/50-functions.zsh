@@ -1150,7 +1150,15 @@ function load_node_version() {
 
 # Run onefetch if available and in a git repository
 function run_onefetch_on_cd() {
-    if command -v onefetch >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if ! command -v onefetch >/dev/null 2>&1; then
+        return
+    fi
+
+    local git_root
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null) || return
+
+    # Run only at the root of the Git repository
+    if [[ "$PWD" -ef "$git_root" ]]; then
         clear
         print
         print

@@ -1,0 +1,49 @@
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$HOME/.config/omarchy/backgrounds"
+CURRENT="$HOME/.local/state/omarchy/current/background"
+
+# Collect wallpapers without sorting or deduplicating.
+mapfile -d '' -t WALLPAPERS < <(
+    find -L "$ROOT" -maxdepth 2 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' \
+        -o -iname '*.png' -o -iname '*.webp' \
+        -o -iname '*.bmp' -o -iname '*.gif' \) \
+        -print0 2>/dev/null
+)
+
+if ((${#WALLPAPERS[@]} == 0)); then
+    echo "No wallpapers found under $ROOT" >&2
+    exit 1
+fi
+
+CURRENT_REAL=""
+if [[ -e "$CURRENT" ]]; then
+    CURRENT_REAL="$(realpath "$CURRENT")"
+fi
+
+# Try random alternatives without building and sorting another array.
+SELECTED=""
+for ((attempt = 0; attempt < 20; attempt++)); do
+    candidate="${WALLPAPERS[RANDOM % ${#WALLPAPERS[@]}]}"
+    if [[ -z "$CURRENT_REAL" ]] || [[ "$(realpath "$candidate")" != "$CURRENT_REAL" ]]; then
+        SELECTED="$candidate"
+        break
+    fi
+done
+
+# Fallback: guarantee a different wallpaper if one exists.
+if [[ -z "$SELECTED" ]]; then
+    for candidate in "${WALLPAPERS[@]}"; do
+        if [[ "$(realpath "$candidate")" != "$CURRENT_REAL" ]]; then
+            SELECTED="$candidate"
+            break
+        fi
+    done
+fi
+
+[[ -n "$SELECTED" ]] || SELECTED="${WALLPAPERS[0]}"
+
+omarchy theme bg set "$SELECTED"
